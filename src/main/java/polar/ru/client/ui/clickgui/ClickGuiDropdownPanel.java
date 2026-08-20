@@ -2,6 +2,8 @@ package polar.ru.client.ui.clickgui;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
+import polar.ru.api.utils.animation.AnimationUtils;
+import polar.ru.api.utils.animation.Easings;
 import polar.ru.api.utils.color.ColorUtils;
 import polar.ru.api.utils.render.RenderUtils;
 import polar.ru.api.utils.render.fonts.msdf.Font;
@@ -13,109 +15,101 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class ClickGuiDropdownPanel {
-
     private final Module.ModuleCategory category;
-    private final List<ClickGuiDropdownModule> moduleComponents = new ArrayList<>();
+    private final List<ClickGuiDropdownModule> modules = new ArrayList<>();
     private float x, y;
-    private final float width = 105f;
-    private final float height = 220f;
-    private float scroll = 0;
-    private float animatedScroll = 0;
+    private static final float WIDTH = 105f;
+    private static final float HEIGHT = 220f;
+    private static final float HEADER = 20f;
+    private float scroll;
+    private float animatedScroll;
+    private final AnimationUtils headerAnimation = new AnimationUtils(1f, 8f, Easings.CUBIC_OUT);
 
     public ClickGuiDropdownPanel(Module.ModuleCategory category, List<Module> modules) {
         this.category = category;
-        for (Module module : modules) {
-            moduleComponents.add(new ClickGuiDropdownModule(module));
-        }
+        for (Module module : modules) this.modules.add(new ClickGuiDropdownModule(module));
     }
 
-    public void setPosition(float x, float y) {
-        this.x = x;
-        this.y = y;
-    }
+    public void setPosition(float x, float y) { this.x = x; this.y = y; }
+    public static float getWidth() { return WIDTH; }
+    public static float getHeight() { return HEIGHT; }
 
     public void render(DrawContext context, int mouseX, int mouseY) {
         MatrixStack matrices = context.getMatrices();
-        float headerHeight = 20f;
 
-        int bgColor = ColorUtils.rgba(25, 26, 40, 165);
-        int bgInner = ColorUtils.rgba(25, 26, 40, 125);
-        RenderUtils.drawRoundedRect(matrices, x, y, width, height, 13f, bgColor);
-        RenderUtils.drawRoundedRect(matrices, x + 3.8f, y + 3.5f, width - 8, height - 7, 12f, bgInner);
-        RenderUtils.drawShadow(matrices, x + 3.8f, y + 3.5f, width - 8, height - 7, 12f, ColorUtils.rgba(0,0,0,50));
+        int outer = ColorUtils.rgba(25, 26, 40, 165);
+        int inner = ColorUtils.rgba(25, 26, 40, 125);
+        RenderUtils.drawRoundedRect(matrices, x, y, WIDTH, HEIGHT, 13f, outer);
+        RenderUtils.drawRoundedRect(matrices, x + 3.8f, y + 3.5f, WIDTH - 8f, HEIGHT - 7f, 12f, inner);
+        RenderUtils.drawShadow(matrices, x + 3.8f, y + 3.5f, WIDTH - 8f, HEIGHT - 7f,
+                12f, ColorUtils.rgba(0, 0, 0, 50));
 
         Font font = Fonts.getFont("moe3", 8);
         if (font != null) {
-            String catName = category.name();
-            float textX = x + width / 2f - font.getWidth(catName) / 2f;
-            float textY = y + headerHeight / 2f - font.getHeight() / 2f + 4;
-            font.draw(matrices, catName, textX, textY, ColorUtils.rgb(255, 255, 255));
+            String title = category.getName();
+            float titleX = x + WIDTH / 2f - font.getWidth(title) / 2f;
+            font.draw(matrices, title, titleX, y + 6f, ColorUtils.rgb(255, 255, 255));
         }
 
-        float innerX = x + 5;
-        float innerY = y + headerHeight + 5;
-        float innerW = width - 10;
-        float innerH = height - headerHeight - 10;
+        float innerX = x + 5f;
+        float innerY = y + HEADER + 5f;
+        float innerW = WIDTH - 10f;
+        float innerH = HEIGHT - HEADER - 10f;
 
-        float totalModulesHeight = 0;
-        for (ClickGuiDropdownModule comp : moduleComponents) {
-            totalModulesHeight += comp.getHeight() + 3.5f;
+        float totalHeight = 0f;
+        for (ClickGuiDropdownModule module : modules) {
+            totalHeight += module.getHeight() + 3.5f;
         }
 
-        animatedScroll += (scroll - animatedScroll) * 0.1f;
-        float maxScroll = Math.max(0, totalModulesHeight - innerH);
-        float clampedScroll = Math.max(0, Math.min(maxScroll, animatedScroll));
+        animatedScroll += (scroll - animatedScroll) * 0.2f;
+        float maxScroll = Math.max(0f, totalHeight - innerH);
+        float actualScroll = Math.max(0f, Math.min(maxScroll, animatedScroll));
 
         ScissorUtils.push();
         ScissorUtils.setFromComponentCoordinates(innerX, innerY, innerW, innerH);
 
-        float offsetY = 0;
-        for (ClickGuiDropdownModule comp : moduleComponents) {
-            comp.setPosition(innerX, innerY + offsetY - clampedScroll);
-            comp.setWidth(innerW);
-            comp.render(context, mouseX, mouseY);
-            offsetY += comp.getHeight() + 3.5f;
+        float offset = 0f;
+        for (ClickGuiDropdownModule module : modules) {
+            module.setPosition(innerX, innerY + offset - actualScroll);
+            module.setWidth(innerW);
+            module.render(context, mouseX, mouseY);
+            offset += module.getHeight() + 3.5f;
         }
 
         ScissorUtils.pop();
     }
 
     public void mouseClicked(double mouseX, double mouseY, int button) {
-        if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
-            for (ClickGuiDropdownModule comp : moduleComponents) {
-                comp.mouseClicked(mouseX, mouseY, button);
-            }
+        if (!inside(mouseX, mouseY)) return;
+        for (ClickGuiDropdownModule module : modules) {
+            module.mouseClicked(mouseX, mouseY, button);
         }
     }
 
     public void mouseReleased(double mouseX, double mouseY, int button) {
-        if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
-            for (ClickGuiDropdownModule comp : moduleComponents) {
-                comp.mouseReleased(mouseX, mouseY, button);
-            }
+        if (!inside(mouseX, mouseY)) return;
+        for (ClickGuiDropdownModule module : modules) {
+            module.mouseReleased(mouseX, mouseY, button);
         }
     }
 
-    public void mouseScrolled(double mouseX, double mouseY, double verticalAmount) {
-        if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
-            float totalModulesHeight = 0;
-            for (ClickGuiDropdownModule comp : moduleComponents) {
-                totalModulesHeight += comp.getHeight() + 3.5f;
-            }
-            float maxScroll = Math.max(0, totalModulesHeight - (height - 20f - 10f));
-            scroll = Math.max(0, Math.min(maxScroll, scroll - (float)verticalAmount * 10f));
-        }
+    public void mouseScrolled(double mouseX, double mouseY, double amount) {
+        if (!inside(mouseX, mouseY)) return;
+        float totalHeight = 0f;
+        for (ClickGuiDropdownModule module : modules) totalHeight += module.getHeight() + 3.5f;
+        float maxScroll = Math.max(0f, totalHeight - (HEIGHT - HEADER - 10f));
+        scroll = Math.max(0f, Math.min(maxScroll, scroll - (float) amount * 10f));
     }
 
     public void keyPressed(int keyCode, int scanCode, int modifiers) {
-        for (ClickGuiDropdownModule comp : moduleComponents) {
-            comp.keyPressed(keyCode, scanCode, modifiers);
-        }
+        for (ClickGuiDropdownModule module : modules) module.keyPressed(keyCode, scanCode, modifiers);
     }
 
     public void charTyped(char chr, int modifiers) {
-        for (ClickGuiDropdownModule comp : moduleComponents) {
-            comp.charTyped(chr, modifiers);
-        }
+        for (ClickGuiDropdownModule module : modules) module.charTyped(chr, modifiers);
+    }
+
+    private boolean inside(double mouseX, double mouseY) {
+        return mouseX >= x && mouseX <= x + WIDTH && mouseY >= y && mouseY <= y + HEIGHT;
     }
 }

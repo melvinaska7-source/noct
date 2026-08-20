@@ -2,192 +2,163 @@ package polar.ru.client.ui.clickgui;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
+import org.lwjgl.glfw.GLFW;
 import polar.ru.api.utils.animation.AnimationUtils;
 import polar.ru.api.utils.animation.Easings;
+import polar.ru.api.utils.input.KeyBoardUtils;
 import polar.ru.api.utils.color.ColorUtils;
 import polar.ru.api.utils.render.RenderUtils;
 import polar.ru.api.utils.render.fonts.msdf.Font;
 import polar.ru.api.utils.render.fonts.msdf.Fonts;
 import polar.ru.client.modules.Module;
-import polar.ru.client.modules.settings.*;
+import polar.ru.client.modules.settings.Setting;
 import polar.ru.client.modules.settings.implement.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class ClickGuiDropdownModule {
-
     private final Module module;
-    private final List<ClickGuiDropdownSetting> settingComponents = new ArrayList<>();
-    private float x, y;
-    private float width;
-    private float height = 20f;
-    private boolean open = false;
-    private final AnimationUtils openAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
-    private boolean bindMode = false;
-    
-    private BindSetting bindSetting = null;
+    private final List<ClickGuiDropdownSetting> settings = new ArrayList<>();
+    private float x, y, width;
+    private static final float HEADER_HEIGHT = 20f;
+    private boolean open;
+    private boolean binding;
+    private final AnimationUtils openAnimation = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
 
     public ClickGuiDropdownModule(Module module) {
         this.module = module;
-        List<Setting> settings = module.getSettings();
-        if (settings != null) {
-            for (Setting setting : settings) {
-                if (setting instanceof BooleanSetting) {
-                    settingComponents.add(new ClickGuiDropdownBoolean((BooleanSetting) setting));
-                } else if (setting instanceof FloatSetting) {
-                    settingComponents.add(new ClickGuiDropdownSlider((FloatSetting) setting));
-                } else if (setting instanceof BindSetting) {
-                    bindSetting = (BindSetting) setting;
-                    settingComponents.add(new ClickGuiDropdownBind(bindSetting, this));
-                } else if (setting instanceof ModeSetting) {
-                    settingComponents.add(new ClickGuiDropdownMode((ModeSetting) setting));
-                } else if (setting instanceof ListSetting) {
-                    settingComponents.add(new ClickGuiDropdownList((ListSetting) setting));
-                } else if (setting instanceof TextSetting) {
-                    settingComponents.add(new ClickGuiDropdownText((TextSetting) setting));
-                }
-            }
+        for (Setting setting : module.getSettings()) {
+            if (setting instanceof BooleanSetting s) settings.add(new ClickGuiDropdownBoolean(s));
+            else if (setting instanceof FloatSetting s) settings.add(new ClickGuiDropdownSlider(s));
+            else if (setting instanceof ModeSetting s) settings.add(new ClickGuiDropdownMode(s));
+            else if (setting instanceof ListSetting s) settings.add(new ClickGuiDropdownList(s));
+            else if (setting instanceof TextSetting s) settings.add(new ClickGuiDropdownText(s));
+            else if (setting instanceof BindSetting s) settings.add(new ClickGuiDropdownBind(s, this));
         }
         open = module.isOpen();
-        openAnim.update(open ? 1f : 0f);
+        openAnimation.update(open ? 1f : 0f);
     }
 
-    public void setPosition(float x, float y) {
-        this.x = x;
-        this.y = y;
-    }
-
-    public void setWidth(float width) {
-        this.width = width;
-    }
+    public void setPosition(float x, float y) { this.x = x; this.y = y; }
+    public void setWidth(float width) { this.width = width; }
 
     public float getHeight() {
-        float totalSettingsHeight = 0;
-        for (ClickGuiDropdownSetting comp : settingComponents) {
-            if (comp.isVisible()) totalSettingsHeight += comp.getHeight();
+        float total = HEADER_HEIGHT;
+        for (ClickGuiDropdownSetting setting : settings) {
+            if (setting.isVisible()) total += setting.getHeight();
         }
-        return height + totalSettingsHeight * openAnim.getValue();
+        float progress = openAnimation.getValue();
+        return HEADER_HEIGHT + (total - HEADER_HEIGHT) * progress;
     }
 
     public void render(DrawContext context, int mouseX, int mouseY) {
         MatrixStack matrices = context.getMatrices();
-        boolean isEnabled = module.isEnable();
+        openAnimation.update(open ? 1f : 0f);
 
-        int bgColor = ColorUtils.rgba(25, 26, 40, 165);
-        RenderUtils.drawRoundedRect(matrices, x + 2, y, width - 5, height, 5f, bgColor);
+        int background = ColorUtils.rgba(25, 26, 40, 165);
+        RenderUtils.drawRoundedRect(matrices, x + 2, y, width - 5, HEADER_HEIGHT, 5f, background);
 
         Font font = Fonts.getFont("moe3", 7);
         if (font != null) {
-            String name = module.getName();
-            int textColor = isEnabled ? ColorUtils.rgb(255,255,255) : ColorUtils.rgb(161, 164, 177);
-            font.draw(matrices, name, x + 6, y + 6.5f, textColor);
+            int textColor = module.isEnable()
+                    ? ColorUtils.rgb(255, 255, 255)
+                    : ColorUtils.rgb(161, 164, 177);
+            font.draw(matrices, module.getDisplayName(), x + 6, y + 6.5f, textColor);
         }
 
-        boolean hasSettings = !settingComponents.isEmpty();
+        boolean hasSettings = settings.stream().anyMatch(ClickGuiDropdownSetting::isVisible);
         if (hasSettings) {
-            Font iconFont = Fonts.getFont("icon", 6);
-            if (iconFont != null) {
-                String icon = open ? "C" : "B";
-                float iconX = x + width - 6 - iconFont.getWidth(icon);
-                float iconY = y + 6f + 1;
-                iconFont.draw(matrices, icon, iconX, iconY, ColorUtils.rgb(161, 164, 177));
-            }
-            if (bindMode) {
-                Font bindFont = Fonts.getFont("moe3", 6);
-                if (bindFont != null) {
-                    int key = bindSetting != null ? bindSetting.getKey() : -1;
-                    String bindText = key == -1 ? "Нету" : String.valueOf(key);
-                    if (bindMode) bindText = "...";
-                    float bindX = x + width - 6 - bindFont.getWidth(bindText);
-                    bindFont.draw(matrices, bindText, bindX, y + 6f + 1, ColorUtils.rgb(161, 164, 177));
-                }
+            Font icon = Fonts.getFont("icon", 6);
+            if (icon != null && !binding) {
+                String glyph = open ? "C" : "B";
+                icon.draw(matrices, glyph, x + width - 6 - icon.getWidth(glyph),
+                        y + 6f + 1f, ColorUtils.rgb(161, 164, 177));
             }
         }
 
-        if (openAnim.getValue() > 0.01f) {
-            float settingsY = y + height;
-            float settingsHeight = 0;
-            for (ClickGuiDropdownSetting comp : settingComponents) {
-                if (comp.isVisible()) {
-                    comp.setPosition(x, settingsY + settingsHeight);
-                    comp.setWidth(width - 5);
-                    comp.render(context, mouseX, mouseY);
-                    settingsHeight += comp.getHeight();
-                }
+        if (binding) {
+            Font bindFont = Fonts.getFont("moe3", 5);
+            if (bindFont != null) {
+                String text = "...";
+                bindFont.draw(matrices, text, x + width - 6 - bindFont.getWidth(text),
+                        y + 6.5f, ColorUtils.rgb(161, 164, 177));
             }
+        }
+
+        if (openAnimation.getValue() <= 0.001f) return;
+
+        float offset = HEADER_HEIGHT;
+        for (ClickGuiDropdownSetting setting : settings) {
+            if (!setting.isVisible()) continue;
+            setting.setPosition(x, y + offset);
+            setting.setWidth(width - 5);
+            setting.render(context, mouseX, mouseY);
+            offset += setting.getHeight();
         }
     }
 
+    private boolean headerHovered(double mouseX, double mouseY) {
+        return mouseX >= x && mouseX <= x + width &&
+               mouseY >= y && mouseY <= y + HEADER_HEIGHT;
+    }
+
     public void mouseClicked(double mouseX, double mouseY, int button) {
-        if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
+        if (binding) {
+            if (button >= 0) {
+                module.setKey(KeyBoardUtils.createMouseBind(button));
+                binding = false;
+            }
+            return;
+        }
+
+        if (headerHovered(mouseX, mouseY)) {
             if (button == 0) {
                 module.toggle();
             } else if (button == 1) {
                 open = !open;
                 module.setOpen(open);
-                openAnim.update(open ? 1f : 0f);
             } else if (button == 2) {
-                bindMode = !bindMode;
+                binding = true;
             }
             return;
         }
-        if (openAnim.getValue() > 0.01f) {
-            for (ClickGuiDropdownSetting comp : settingComponents) {
-                if (comp.isVisible()) {
-                    comp.mouseClicked(mouseX, mouseY, button);
-                }
+
+        if (openAnimation.getValue() > 0.01f) {
+            for (ClickGuiDropdownSetting setting : settings) {
+                if (setting.isVisible()) setting.mouseClicked(mouseX, mouseY, button);
             }
         }
     }
 
     public void mouseReleased(double mouseX, double mouseY, int button) {
-        if (openAnim.getValue() > 0.01f) {
-            for (ClickGuiDropdownSetting comp : settingComponents) {
-                if (comp.isVisible()) {
-                    comp.mouseReleased(mouseX, mouseY, button);
-                }
-            }
+        for (ClickGuiDropdownSetting setting : settings) {
+            if (setting.isVisible()) setting.mouseReleased(mouseX, mouseY, button);
         }
     }
 
     public void keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (bindMode) {
-            if (keyCode == 256) {
-                bindMode = false;
-            } else if (keyCode == 261 || keyCode == 259) {
-                if (bindSetting != null) bindSetting.setKey(-1);
-                bindMode = false;
+        if (binding) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE || keyCode == GLFW.GLFW_KEY_DELETE ||
+                keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                module.setKey(-1);
             } else {
-                if (bindSetting != null) bindSetting.setKey(keyCode);
-                bindMode = false;
+                module.setKey(keyCode);
             }
+            binding = false;
             return;
         }
-        if (openAnim.getValue() > 0.01f) {
-            for (ClickGuiDropdownSetting comp : settingComponents) {
-                if (comp.isVisible()) {
-                    comp.keyPressed(keyCode, scanCode, modifiers);
-                }
-            }
+        for (ClickGuiDropdownSetting setting : settings) {
+            if (setting.isVisible()) setting.keyPressed(keyCode, scanCode, modifiers);
         }
     }
 
     public void charTyped(char chr, int modifiers) {
-        if (openAnim.getValue() > 0.01f) {
-            for (ClickGuiDropdownSetting comp : settingComponents) {
-                if (comp.isVisible()) {
-                    comp.charTyped(chr, modifiers);
-                }
-            }
+        for (ClickGuiDropdownSetting setting : settings) {
+            if (setting.isVisible()) setting.charTyped(chr, modifiers);
         }
     }
 
-    public boolean isBindMode() {
-        return bindMode;
-    }
-
-    public void setBindMode(boolean bindMode) {
-        this.bindMode = bindMode;
-    }
+    public boolean isBindMode() { return binding; }
+    public void setBindMode(boolean value) { binding = value; }
 }
