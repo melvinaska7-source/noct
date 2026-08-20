@@ -14,7 +14,6 @@ public class ClickGuiDropdownRenderer {
 
     public ClickGuiDropdownRenderer() {
         for (Module.ModuleCategory category : Module.ModuleCategory.values()) {
-            if (category == Module.ModuleCategory.LUA) continue;
             List<Module> modules = ModuleClass.INSTANCE.getObject().stream()
                     .filter(m -> m.getCategory() == category)
                     .toList();

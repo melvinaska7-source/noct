@@ -26,13 +26,13 @@ public class ClickGuiDropdownMode extends ClickGuiDropdownSetting {
             boolean selected = modes.get(i).equals(setting.getCurrent());
             anims[i] = new AnimationUtils(selected ? 1f : 0f, 8f, Easings.CUBIC_OUT);
         }
-        setHeight(22); // будет пересчитано при рендере
+        setHeight(22);
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY) {
         MatrixStack matrices = context.getMatrices();
-        Font font = Fonts.getFont("moe3", 5.5f);
+        Font font = Fonts.getFont("moe3", 5);
         if (font == null) return;
 
         font.draw(matrices, setting.name(), x + 5, y + 2, ColorUtils.rgb(255,255,255));
@@ -74,7 +74,6 @@ public class ClickGuiDropdownMode extends ClickGuiDropdownSetting {
             itemsInRow++;
         }
 
-        // Высота зависит от количества строк
         float totalRows = (float) Math.ceil(modes.size() / (double) maxPerRow);
         float totalHeight = 10 + totalRows * (chipHeight + gap) - gap;
         setHeight(totalHeight + 2);
@@ -84,6 +83,9 @@ public class ClickGuiDropdownMode extends ClickGuiDropdownSetting {
     public void mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return;
         List<String> modes = setting.getMods();
+        Font font = Fonts.getFont("moe3", 5);
+        if (font == null) return;
+
         float chipX = x + 5;
         float chipY = y + 10;
         float availableWidth = width - 10;
@@ -96,7 +98,7 @@ public class ClickGuiDropdownMode extends ClickGuiDropdownSetting {
 
         for (int i = 0; i < modes.size(); i++) {
             String mode = modes.get(i);
-            float textWidth = Fonts.getFont("moe3", 5.5f).getWidth(mode);
+            float textWidth = font.getWidth(mode);
             float chipWidth = textWidth + 8;
             if (offsetX > 0 && offsetX + chipWidth > availableWidth || itemsInRow >= maxPerRow) {
                 offsetX = 0;
@@ -105,7 +107,6 @@ public class ClickGuiDropdownMode extends ClickGuiDropdownSetting {
             }
             if (HoveringUtils.isHovered(mouseX, mouseY, chipX + offsetX, chipY + offsetY, chipWidth, chipHeight)) {
                 setting.set(mode);
-                // обновим анимации
                 for (int j = 0; j < anims.length; j++) {
                     anims[j].update(modes.get(j).equals(mode) ? 1f : 0f);
                 }

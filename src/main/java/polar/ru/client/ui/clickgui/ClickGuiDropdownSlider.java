@@ -28,7 +28,7 @@ public class ClickGuiDropdownSlider extends ClickGuiDropdownSetting {
         float progress = (setting.get() - setting.getMin()) / (setting.getMax() - setting.getMin());
         anim.update(progress);
 
-        Font font = Fonts.getFont("moe3", 5.5f);
+        Font font = Fonts.getFont("moe3", 5);
         if (font != null) {
             font.draw(matrices, setting.name(), x + 5, y + 4.5f/2f + 1, ColorUtils.rgb(255,255,255));
             String valueStr = String.valueOf(setting.get());
@@ -45,8 +45,8 @@ public class ClickGuiDropdownSlider extends ClickGuiDropdownSetting {
         RenderUtils.drawRoundedRect(matrices, trackX, trackY, fillW, trackH, 0.6f, ColorUtils.rgb(129,135,255));
         float knobX = trackX + fillW;
         float knobY = trackY + trackH/2f;
-        RenderUtils.drawCircle(matrices, knobX, knobY, 5f, ColorUtils.rgb(129,135,255));
-        RenderUtils.drawShadowCircle(matrices, knobX, knobY, 6f, ColorUtils.rgba(129,135,255,80));
+        RenderUtils.drawRoundCircle(matrices, knobX, knobY, 5f, ColorUtils.rgb(129,135,255));
+        RenderUtils.drawShadow(matrices, knobX - 4f, knobY - 4f, 8f, 8f, 6f, ColorUtils.rgba(129,135,255,80));
     }
 
     @Override

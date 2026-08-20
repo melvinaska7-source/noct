@@ -31,7 +31,7 @@ public class ClickGuiDropdownList extends ClickGuiDropdownSetting {
     @Override
     public void render(DrawContext context, int mouseX, int mouseY) {
         MatrixStack matrices = context.getMatrices();
-        Font font = Fonts.getFont("moe3", 5.5f);
+        Font font = Fonts.getFont("moe3", 5);
         if (font == null) return;
 
         font.draw(matrices, setting.name(), x + 5, y + 2, ColorUtils.rgb(255,255,255));
@@ -81,7 +81,7 @@ public class ClickGuiDropdownList extends ClickGuiDropdownSetting {
     @Override
     public void mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return;
-        Font font = Fonts.getFont("moe3", 5.5f);
+        Font font = Fonts.getFont("moe3", 5);
         if (font == null) return;
 
         float chipX = x + 5;

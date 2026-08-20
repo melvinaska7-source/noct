@@ -26,7 +26,7 @@ public class ClickGuiDropdownBoolean extends ClickGuiDropdownSetting {
         MatrixStack matrices = context.getMatrices();
         anim.update(setting.isState() ? 1f : 0f);
 
-        Font font = Fonts.getFont("moe3", 6.5f);
+        Font font = Fonts.getFont("moe3", 6);
         if (font != null) {
             font.draw(matrices, setting.name(), x + 5, y + 6.5f/2f + 1, ColorUtils.rgb(255,255,255));
         }
@@ -41,8 +41,8 @@ public class ClickGuiDropdownBoolean extends ClickGuiDropdownSetting {
         int color = ColorUtils.interpolate(ColorUtils.rgb(129,135,255), ColorUtils.rgb(129,135,255), 1 - progress);
         float circleX = toggleX + 4 + (7 * progress);
         float circleY = toggleY + toggleH/2f;
-        RenderUtils.drawCircle(matrices, circleX, circleY, 5f, color);
-        RenderUtils.drawShadowCircle(matrices, circleX, circleY, 7f, ColorUtils.setAlpha(color, 128));
+        RenderUtils.drawRoundCircle(matrices, circleX, circleY, 5f, color);
+        RenderUtils.drawShadow(matrices, circleX - 4f, circleY - 4f, 8f, 8f, 6f, ColorUtils.applyAlpha(color, 80));
     }
 
     @Override

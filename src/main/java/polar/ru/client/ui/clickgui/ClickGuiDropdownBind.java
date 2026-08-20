@@ -29,12 +29,12 @@ public class ClickGuiDropdownBind extends ClickGuiDropdownSetting {
         boolean binding = parent.isBindMode();
         anim.update(binding ? 1f : 0f);
 
-        Font font = Fonts.getFont("moe3", 5.5f);
+        Font font = Fonts.getFont("moe3", 5);
         if (font == null) return;
 
         font.draw(matrices, setting.name(), x + 5, y + 6.5f/2f + 1, ColorUtils.rgb(255,255,255));
 
-        String bindText = binding ? "..." : String.valueOf(setting.getKey());
+        String bindText = binding ? "..." : (setting.getKey() == -1 ? "Нету" : String.valueOf(setting.getKey()));
         float bindWidth = font.getWidth(bindText) + 8;
         float bindX = x + width - bindWidth - 5;
         float bindY = y + 3;
@@ -47,14 +47,16 @@ public class ClickGuiDropdownBind extends ClickGuiDropdownSetting {
     @Override
     public void mouseClicked(double mouseX, double mouseY, int button) {
         if (button == 0) {
-            float bindWidth = Fonts.getFont("moe3", 5.5f).getWidth(setting.getKey() == -1 ? "Нету" : String.valueOf(setting.getKey())) + 8;
+            Font font = Fonts.getFont("moe3", 5);
+            if (font == null) return;
+            String bindText = parent.isBindMode() ? "..." : (setting.getKey() == -1 ? "Нету" : String.valueOf(setting.getKey()));
+            float bindWidth = font.getWidth(bindText) + 8;
             float bindX = x + width - bindWidth - 5;
             float bindY = y + 3;
             if (HoveringUtils.isHovered(mouseX, mouseY, bindX, bindY, bindWidth, 10f)) {
                 parent.setBindMode(!parent.isBindMode());
             }
         }
-        // Мышиные кнопки для биндинга обрабатываются в родителе
     }
 
     @Override public void mouseReleased(double mouseX, double mouseY, int button) {}

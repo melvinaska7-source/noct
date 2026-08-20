@@ -33,11 +33,9 @@ public class ClickGuiScreen extends Screen {
         int screenWidth = window.getScaledWidth();
         int screenHeight = window.getScaledHeight();
 
-        // Затемнение фона
         int overlayAlpha = (int) (80 * openAnim.getValue());
         context.fill(0, 0, screenWidth, screenHeight, (overlayAlpha << 24) | 0x000000);
 
-        // Масштабирование
         context.getMatrices().push();
         float scale = openAnim.getValue();
         float centerX = screenWidth / 2f;

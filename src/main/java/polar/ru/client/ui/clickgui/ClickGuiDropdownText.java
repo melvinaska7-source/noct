@@ -2,8 +2,6 @@ package polar.ru.client.ui.clickgui;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.math.MatrixStack;
-import polar.ru.api.utils.animation.AnimationUtils;
-import polar.ru.api.utils.animation.Easings;
 import polar.ru.api.utils.color.ColorUtils;
 import polar.ru.api.utils.math.HoveringUtils;
 import polar.ru.api.utils.render.RenderUtils;
@@ -41,7 +39,7 @@ public class ClickGuiDropdownText extends ClickGuiDropdownSetting {
         RenderUtils.drawRoundedRect(matrices, boxX, boxY, boxW, boxH, 2f, ColorUtils.rgb(25,26,40));
         font.draw(matrices, display, boxX + 3, boxY + (boxH - font.getHeight())/2f, ColorUtils.rgb(255,255,255));
 
-        setHeight(22); // фиксированная высота, можно увеличить при длинном тексте, но упростим
+        setHeight(22);
     }
 
     @Override

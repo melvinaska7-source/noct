@@ -25,6 +25,8 @@ public class ClickGuiDropdownModule {
     private boolean open = false;
     private final AnimationUtils openAnim = new AnimationUtils(0f, 10f, Easings.CUBIC_OUT);
     private boolean bindMode = false;
+    
+    private BindSetting bindSetting = null;
 
     public ClickGuiDropdownModule(Module module) {
         this.module = module;
@@ -36,7 +38,8 @@ public class ClickGuiDropdownModule {
                 } else if (setting instanceof FloatSetting) {
                     settingComponents.add(new ClickGuiDropdownSlider((FloatSetting) setting));
                 } else if (setting instanceof BindSetting) {
-                    settingComponents.add(new ClickGuiDropdownBind((BindSetting) setting, this));
+                    bindSetting = (BindSetting) setting;
+                    settingComponents.add(new ClickGuiDropdownBind(bindSetting, this));
                 } else if (setting instanceof ModeSetting) {
                     settingComponents.add(new ClickGuiDropdownMode((ModeSetting) setting));
                 } else if (setting instanceof ListSetting) {
@@ -86,15 +89,17 @@ public class ClickGuiDropdownModule {
             Font iconFont = Fonts.getFont("icon", 6);
             if (iconFont != null) {
                 String icon = open ? "C" : "B";
-                float iconX = x + width - 6 - iconFont.getWidth(icon, 6);
+                float iconX = x + width - 6 - iconFont.getWidth(icon);
                 float iconY = y + 6f + 1;
                 iconFont.draw(matrices, icon, iconX, iconY, ColorUtils.rgb(161, 164, 177));
             }
             if (bindMode) {
                 Font bindFont = Fonts.getFont("moe3", 6);
                 if (bindFont != null) {
-                    String bindText = module.getKey() == 0 ? "..." : String.valueOf(module.getKey());
-                    float bindX = x + width - 6 - bindFont.getWidth(bindText, 6);
+                    int key = bindSetting != null ? bindSetting.getKey() : -1;
+                    String bindText = key == -1 ? "Нету" : String.valueOf(key);
+                    if (bindMode) bindText = "...";
+                    float bindX = x + width - 6 - bindFont.getWidth(bindText);
                     bindFont.draw(matrices, bindText, bindX, y + 6f + 1, ColorUtils.rgb(161, 164, 177));
                 }
             }
@@ -151,10 +156,10 @@ public class ClickGuiDropdownModule {
             if (keyCode == 256) {
                 bindMode = false;
             } else if (keyCode == 261 || keyCode == 259) {
-                module.setKey(0);
+                if (bindSetting != null) bindSetting.setKey(-1);
                 bindMode = false;
             } else {
-                module.setKey(keyCode);
+                if (bindSetting != null) bindSetting.setKey(keyCode);
                 bindMode = false;
             }
             return;
@@ -180,5 +185,9 @@ public class ClickGuiDropdownModule {
 
     public boolean isBindMode() {
         return bindMode;
+    }
+
+    public void setBindMode(boolean bindMode) {
+        this.bindMode = bindMode;
     }
 }
