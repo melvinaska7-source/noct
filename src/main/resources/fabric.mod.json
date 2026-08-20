@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "lavanda",
+  "version": "1.0.0",
+  "name": "NocturneDLC",
+  "description": "Nocturne bust",
+  "authors": [
+    "MelviAvas"
+  ],
+  "contact": {
+    "homepage": "netu",
+    "sources": "net"
+  },
+  "license": "CC0-1.0",
+  "icon": "assets/polar/icon.png",
+  "environment": "*",
+  "jars": [],
+  "entrypoints": {
+    "main": [
+      "polar.ru.polar"
+    ],
+    "client": [
+      "polar.ru.client.Polar"
+    ]
+  },
+  "mixins": [
+    "polar.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": "\u003e\u003d0.18.4",
+    "minecraft": "~1.21.4",
+    "java": "\u003e\u003d21",
+    "fabric-api": "*"
+  }
+}

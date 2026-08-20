@@ -1,0 +1,7 @@
+.gradle/
+build/
+run/
+cfr_out/
+out/
+.idea/
+*.iml
