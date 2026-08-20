@@ -15,9 +15,9 @@ import polar.ru.client.ui.MenuPanel;
 import polar.ru.client.ui.clickgui.*;
 
 /**
- * Адаптированный ClickGuiScreen, визуально и по логике открытия/закрытия
- * соответствующий MenuScreen, но с использованием существующих зависимостей polar.ru.
- * Добавлено затемнение фона, центрирование окна и анимация масштабирования.
+ * Адаптированный ClickGuiScreen — визуально и по логике открытия/закрытия
+ * соответствует MenuScreen (затемнение, масштабирование), но использует только
+ * существующие зависимости polar.ru. Все оригинальные функции сохранены.
  */
 public class ClickGuiScreen extends Screen {
 
@@ -29,10 +29,6 @@ public class ClickGuiScreen extends Screen {
     private final ClickGuiRenderer renderer = new ClickGuiRenderer(state, settingRenderer, themeSelector, figuraPanel, menuPanel);
     private final AnimationUtils openAnim = new AnimationUtils(0.0f, 8.0f, Easings.CUBIC_OUT);
     private boolean closing = false;
-
-    // Размеры окна GUI (можно подогнать под свои нужды)
-    private static final int GUI_WIDTH = 400;
-    private static final int GUI_HEIGHT = 250;
 
     public ClickGuiScreen() {
         super(Text.literal("ClickGui"));
@@ -52,19 +48,18 @@ public class ClickGuiScreen extends Screen {
             openAnim.update(1.0f);
         }
 
-        // Получаем размеры окна
         var window = client.getWindow();
         int screenWidth = window.getScaledWidth();
         int screenHeight = window.getScaledHeight();
 
-        // Затемнение фона (аналогично MenuScreen)
-        int overlayAlpha = (int) (80 * openAnim.getValue()); // 80 – как в MenuScreen, можно настроить
+        // Затемнение фона (как в MenuScreen)
+        int overlayAlpha = (int) (80 * openAnim.getValue());
         context.fill(0, 0, screenWidth, screenHeight, (overlayAlpha << 24) | 0x000000);
 
-        // Обновляем позицию state (он сам центрирует GUI, оставляем как было)
+        // Обновляем позицию (оригинальный вызов)
         state.updatePosition(window, 0);
 
-        // Применяем масштабирование относительно центра экрана
+        // Масштабирование содержимого относительно центра экрана
         context.getMatrices().push();
         float scale = openAnim.getValue();
         float centerX = screenWidth / 2f;
@@ -73,22 +68,10 @@ public class ClickGuiScreen extends Screen {
         context.getMatrices().scale(scale, scale, 1f);
         context.getMatrices().translate(-centerX, -centerY, 0);
 
-        // Рисуем фон окна (закруглённый прямоугольник) – используем стандартные средства
-        int x = state.getX();
-        int y = state.getY();
-        int w = GUI_WIDTH;
-        int h = GUI_HEIGHT;
-        // Можно нарисовать фон с тенью или скруглением (здесь упрощённо)
-        context.fill(x, y, x + w, y + h, 0xFF1A1A1A); // тёмный фон
-        // Рамка или обводка – опционально
-        // context.drawBorder(x, y, w, h, 0xFFFFFFFF);
-
-        // Вызов основного рендерера ClickGui (он рисует модули, настройки и т.д.)
+        // Отрисовка самого ClickGui (рендерер сам рисует фон и элементы)
         renderer.render(context, mouseX, mouseY, window, openAnim.getValue());
 
         context.getMatrices().pop();
-
-        // super.render(context, mouseX, mouseY, delta) – можно не вызывать, т.к. Screen ничего не рисует
     }
 
     @Override
@@ -98,9 +81,8 @@ public class ClickGuiScreen extends Screen {
         }
     }
 
-    // Все методы обработки событий (mouseClicked, keyPressed и т.д.) остаются без изменений,
-    // так как они используют state и координаты мыши, а state уже настроен на центрирование.
-    // Ниже приведены оригинальные методы, они работают корректно.
+    // Все остальные методы (обработка событий) остаются без изменений
+    // --------------------------------------------------------------
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
