@@ -29,4 +29,12 @@ extends Module {
     public ClickGuiType getGuiType() {
         return ClickGuiType.DROPDOWN;
     }
+    @Override
+public void onEnable() {
+    System.out.println(">>> ClickGui.onEnable() ВЫЗВАН!");
+    if (mc != null && ClickGui.mc.player != null) {
+        QClient.mc.setScreen(new ClickGuiScreen());
+    }
+    this.toggle();
+    }
 }

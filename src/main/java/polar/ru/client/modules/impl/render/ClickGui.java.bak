@@ -4,7 +4,7 @@ import net.minecraft.client.gui.screen.Screen;
 import polar.ru.api.QClient;
 import polar.ru.client.modules.Module;
 import polar.ru.client.modules.settings.implement.ModeSetting;
-import polar.ru.client.ui.MenuPanel;
+import polar.ru.client.ui.clickgui.ClickGuiScreen;    // ← импорт
 import polar.ru.client.ui.clickgui.ClickGuiType;
 
 public class ClickGui
@@ -21,7 +21,7 @@ extends Module {
     @Override
     public void onEnable() {
         if (mc != null && ClickGui.mc.player != null) {
-            QClient.mc.setScreen((Screen)new MenuPanel());
+            QClient.mc.setScreen(new ClickGuiScreen());   // ← замена
         }
         this.toggle();
     }
@@ -30,4 +30,3 @@ extends Module {
         return ClickGuiType.DROPDOWN;
     }
 }
-
