@@ -12,211 +12,232 @@ import polar.ru.client.modules.settings.implement.FloatSetting;
 import polar.ru.client.modules.settings.implement.ModeSetting;
 import polar.ru.client.modules.settings.implement.TextSetting;
 import polar.ru.client.ui.MenuPanel;
-import polar.ru.client.ui.clickgui.ClickGuiFiguraPanel;
-import polar.ru.client.ui.clickgui.ClickGuiLayout;
-import polar.ru.client.ui.clickgui.ClickGuiRenderer;
-import polar.ru.client.ui.clickgui.ClickGuiSettingRenderer;
-import polar.ru.client.ui.clickgui.ClickGuiState;
-import polar.ru.client.ui.clickgui.ClickGuiThemeSelector;
+import polar.ru.client.ui.clickgui.*;
 
-public class ClickGuiScreen
-extends Screen {
+/**
+ * Адаптированный ClickGuiScreen, визуально и по логике открытия/закрытия
+ * соответствующий MenuScreen, но с использованием существующих зависимостей polar.ru.
+ * Добавлено затемнение фона, центрирование окна и анимация масштабирования.
+ */
+public class ClickGuiScreen extends Screen {
+
     private final ClickGuiState state = new ClickGuiState();
     private final ClickGuiSettingRenderer settingRenderer = new ClickGuiSettingRenderer();
     private final ClickGuiThemeSelector themeSelector = new ClickGuiThemeSelector();
     private final ClickGuiFiguraPanel figuraPanel = new ClickGuiFiguraPanel();
     private final MenuPanel menuPanel = new MenuPanel();
-    private final ClickGuiRenderer renderer = new ClickGuiRenderer(this.state, this.settingRenderer, this.themeSelector, this.figuraPanel, this.menuPanel);
+    private final ClickGuiRenderer renderer = new ClickGuiRenderer(state, settingRenderer, themeSelector, figuraPanel, menuPanel);
     private final AnimationUtils openAnim = new AnimationUtils(0.0f, 8.0f, Easings.CUBIC_OUT);
     private boolean closing = false;
 
+    // Размеры окна GUI (можно подогнать под свои нужды)
+    private static final int GUI_WIDTH = 400;
+    private static final int GUI_HEIGHT = 250;
+
     public ClickGuiScreen() {
-        super((Text)Text.literal((String)"ClickGui"));
+        super(Text.literal("ClickGui"));
     }
 
+    @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        if (this.closing) {
-            this.openAnim.update(0.0f);
-            if (this.openAnim.getValue() <= 0.01f) {
-                this.closing = false;
+        // Логика закрытия с анимацией
+        if (closing) {
+            openAnim.update(0.0f);
+            if (openAnim.getValue() <= 0.01f) {
+                closing = false;
                 super.close();
                 return;
             }
         } else {
-            this.openAnim.update(1.0f);
+            openAnim.update(1.0f);
         }
-        this.state.updatePosition(this.client.getWindow(), 0);
-        this.renderer.render(context, mouseX, mouseY, this.client.getWindow(), this.openAnim.getValue());
+
+        // Получаем размеры окна
+        var window = client.getWindow();
+        int screenWidth = window.getScaledWidth();
+        int screenHeight = window.getScaledHeight();
+
+        // Затемнение фона (аналогично MenuScreen)
+        int overlayAlpha = (int) (80 * openAnim.getValue()); // 80 – как в MenuScreen, можно настроить
+        context.fill(0, 0, screenWidth, screenHeight, (overlayAlpha << 24) | 0x000000);
+
+        // Обновляем позицию state (он сам центрирует GUI, оставляем как было)
+        state.updatePosition(window, 0);
+
+        // Применяем масштабирование относительно центра экрана
+        context.getMatrices().push();
+        float scale = openAnim.getValue();
+        float centerX = screenWidth / 2f;
+        float centerY = screenHeight / 2f;
+        context.getMatrices().translate(centerX, centerY, 0);
+        context.getMatrices().scale(scale, scale, 1f);
+        context.getMatrices().translate(-centerX, -centerY, 0);
+
+        // Рисуем фон окна (закруглённый прямоугольник) – используем стандартные средства
+        int x = state.getX();
+        int y = state.getY();
+        int w = GUI_WIDTH;
+        int h = GUI_HEIGHT;
+        // Можно нарисовать фон с тенью или скруглением (здесь упрощённо)
+        context.fill(x, y, x + w, y + h, 0xFF1A1A1A); // тёмный фон
+        // Рамка или обводка – опционально
+        // context.drawBorder(x, y, w, h, 0xFFFFFFFF);
+
+        // Вызов основного рендерера ClickGui (он рисует модули, настройки и т.д.)
+        renderer.render(context, mouseX, mouseY, window, openAnim.getValue());
+
+        context.getMatrices().pop();
+
+        // super.render(context, mouseX, mouseY, delta) – можно не вызывать, т.к. Screen ничего не рисует
     }
 
+    @Override
     public void close() {
-        if (!this.closing) {
-            this.closing = true;
+        if (!closing) {
+            closing = true;
         }
     }
 
+    // Все методы обработки событий (mouseClicked, keyPressed и т.д.) остаются без изменений,
+    // так как они используют state и координаты мыши, а state уже настроен на центрирование.
+    // Ниже приведены оригинальные методы, они работают корректно.
+
+    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        float contentTop = ClickGuiLayout.contentTop(this.state.getY());
-        float contentBottom = ClickGuiLayout.contentBottom(this.state.getY());
-        for (int i2 = this.renderer.getRegions().size() - 1; i2 >= 0; --i2) {
-            ClickGuiRenderer.Region r2 = this.renderer.getRegions().get(i2);
-            if (!r2.contains(mouseX, mouseY)) continue;
-            if (r2.type != ClickGuiRenderer.Region.Type.CATEGORY && r2.type != ClickGuiRenderer.Region.Type.SEARCH) {
-                if (mouseY < (double)contentTop || mouseY > (double)contentBottom) continue;
+        float contentTop = ClickGuiLayout.contentTop(state.getY());
+        float contentBottom = ClickGuiLayout.contentBottom(state.getY());
+        for (int i = renderer.getRegions().size() - 1; i >= 0; --i) {
+            ClickGuiRenderer.Region r = renderer.getRegions().get(i);
+            if (!r.contains(mouseX, mouseY)) continue;
+            if (r.type != ClickGuiRenderer.Region.Type.CATEGORY && r.type != ClickGuiRenderer.Region.Type.SEARCH) {
+                if (mouseY < contentTop || mouseY > contentBottom) continue;
             }
-            switch (r2.type) {
-                case CATEGORY: {
-                    this.state.setSelectedCategory(r2.category);
-                    this.state.setScrollTarget(r2.category, 0.0f);
+            switch (r.type) {
+                case CATEGORY:
+                    state.setSelectedCategory(r.category);
+                    state.setScrollTarget(r.category, 0.0f);
                     return true;
-                }
-                case SEARCH: {
-                    this.state.setSearchActive(true);
-                    this.state.setEditingTextSetting(null);
+                case SEARCH:
+                    state.setSearchActive(true);
+                    state.setEditingTextSetting(null);
                     return true;
-                }
-                case MODULE_HEADER: {
-                    if (button == 0) {
-                        this.toggleModule(r2.module);
-                    } else if (button == 1) {
-                        this.setModuleOpen(r2.module, !r2.module.isOpen());
-                    }
+                case MODULE_HEADER:
+                    if (button == 0) toggleModule(r.module);
+                    else if (button == 1) setModuleOpen(r.module, !r.module.isOpen());
                     return true;
-                }
-                case TOGGLE: {
-                    this.toggleBoolean((BooleanSetting)r2.setting);
+                case TOGGLE:
+                    toggleBoolean((BooleanSetting) r.setting);
                     return true;
-                }
-                case CHIP_MODE: {
-                    this.setMode((ModeSetting)r2.setting, r2.modeValue);
+                case CHIP_MODE:
+                    setMode((ModeSetting) r.setting, r.modeValue);
                     return true;
-                }
-                case CHIP_LIST: {
-                    this.toggleBoolean(r2.listEntry);
+                case CHIP_LIST:
+                    toggleBoolean(r.listEntry);
                     return true;
-                }
-                case SLIDER: {
-                    FloatSetting s2 = (FloatSetting)r2.setting;
-                    this.state.setActiveSlider(s2);
-                    this.state.beginSliderDrag(s2, mouseX);
-                    s2.setValue(this.state.getSliderValue(s2, r2.x, mouseX, r2.w));
+                case SLIDER:
+                    FloatSetting s = (FloatSetting) r.setting;
+                    state.setActiveSlider(s);
+                    state.beginSliderDrag(s, mouseX);
+                    s.setValue(state.getSliderValue(s, r.x, mouseX, r.w));
                     return true;
-                }
-                case BIND: {
-                    this.state.setBindingSetting((BindSetting)r2.setting);
+                case BIND:
+                    state.setBindingSetting((BindSetting) r.setting);
                     return true;
-                }
-                case TEXT: {
-                    this.state.setEditingTextSetting((TextSetting)r2.setting);
-                    this.state.setSearchActive(false);
+                case TEXT:
+                    state.setEditingTextSetting((TextSetting) r.setting);
+                    state.setSearchActive(false);
                     return true;
-                }
             }
         }
-        this.state.setSearchActive(false);
-        this.state.setEditingTextSetting(null);
-        if (this.state.getBindingSetting() != null) {
-            this.state.setBindingSetting(null);
-        }
+        state.setSearchActive(false);
+        state.setEditingTextSetting(null);
+        if (state.getBindingSetting() != null) state.setBindingSetting(null);
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
+    @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        if (this.state.getActiveSlider() != null) {
-            this.state.endSliderDrag(this.state.getActiveSlider());
-            this.state.setActiveSlider(null);
+        if (state.getActiveSlider() != null) {
+            state.endSliderDrag(state.getActiveSlider());
+            state.setActiveSlider(null);
         }
-        this.state.stopSearchSelection();
+        state.stopSearchSelection();
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        Module.ModuleCategory c2 = this.state.getSelectedCategory();
-        float viewH = ClickGuiLayout.contentBottom(this.state.getY()) - ClickGuiLayout.contentTop(this.state.getY());
-        this.state.addScrollPixels(c2, (float)verticalAmount * 22.0f, viewH, this.renderer.getContentHeight());
+        Module.ModuleCategory c = state.getSelectedCategory();
+        float viewH = ClickGuiLayout.contentBottom(state.getY()) - ClickGuiLayout.contentTop(state.getY());
+        state.addScrollPixels(c, (float) verticalAmount * 22.0f, viewH, renderer.getContentHeight());
         return true;
     }
 
+    @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (this.state.getBindingSetting() != null) {
-            if (keyCode == 256) {
-                this.state.setBindingSetting(null);
-            } else if (keyCode == 261 || keyCode == 259) {
-                this.setBindKey(this.state.getBindingSetting(), 0);
-                this.state.setBindingSetting(null);
+        if (state.getBindingSetting() != null) {
+            if (keyCode == 256) state.setBindingSetting(null);
+            else if (keyCode == 261 || keyCode == 259) {
+                setBindKey(state.getBindingSetting(), 0);
+                state.setBindingSetting(null);
             } else {
-                this.setBindKey(this.state.getBindingSetting(), keyCode);
-                this.state.setBindingSetting(null);
+                setBindKey(state.getBindingSetting(), keyCode);
+                state.setBindingSetting(null);
             }
             return true;
         }
-        if (this.state.getEditingTextSetting() != null) {
-            String v2;
-            TextSetting s2 = this.state.getEditingTextSetting();
+        if (state.getEditingTextSetting() != null) {
+            TextSetting s = state.getEditingTextSetting();
             if (keyCode == 256 || keyCode == 257) {
-                this.state.setEditingTextSetting(null);
-            } else if (keyCode == 259 && (v2 = s2.get()) != null && !v2.isEmpty()) {
-                this.setText(s2, v2.substring(0, v2.length() - 1));
+                state.setEditingTextSetting(null);
+            } else if (keyCode == 259) {
+                String v = s.get();
+                if (v != null && !v.isEmpty()) setText(s, v.substring(0, v.length() - 1));
             }
             return true;
         }
-        if (this.state.isSearchActive()) {
+        if (state.isSearchActive()) {
             if (keyCode == 256) {
-                this.state.setSearchActive(false);
+                state.setSearchActive(false);
                 return true;
             }
             if (keyCode == 259) {
-                this.state.removeLastSearchChar();
+                state.removeLastSearchChar();
                 return true;
             }
             if (keyCode == 257) {
-                this.state.setSearchActive(false);
+                state.setSearchActive(false);
                 return true;
             }
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
+    @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (this.state.getEditingTextSetting() != null) {
-            TextSetting s2 = this.state.getEditingTextSetting();
-            String v2 = s2.get() == null ? "" : s2.get();
-            this.setText(s2, v2 + chr);
+        if (state.getEditingTextSetting() != null) {
+            TextSetting s = state.getEditingTextSetting();
+            String v = s.get() == null ? "" : s.get();
+            setText(s, v + chr);
             return true;
         }
-        if (this.state.isSearchActive()) {
-            this.state.appendSearchChar(chr);
+        if (state.isSearchActive()) {
+            state.appendSearchChar(chr);
             return true;
         }
         return super.charTyped(chr, modifiers);
     }
 
+    @Override
     public boolean shouldPause() {
         return false;
     }
 
-    private void toggleModule(Module m2) {
-        m2.setEnabled(!m2.isEnable());
-    }
-
-    private void setModuleOpen(Module m2, boolean open) {
-        m2.setOpen(open);
-    }
-
-    private void toggleBoolean(BooleanSetting s2) {
-        s2.setState(!s2.isState());
-    }
-
-    private void setMode(ModeSetting s2, String mode) {
-        s2.set(mode);
-    }
-
-    private void setBindKey(BindSetting s2, int key) {
-        s2.setKey(key);
-    }
-
-    private void setText(TextSetting s2, String value) {
-        s2.setText(value);
-    }
+    // Вспомогательные методы (оригинальные)
+    private void toggleModule(Module m) { m.setEnabled(!m.isEnable()); }
+    private void setModuleOpen(Module m, boolean open) { m.setOpen(open); }
+    private void toggleBoolean(BooleanSetting s) { s.setState(!s.isState()); }
+    private void setMode(ModeSetting s, String mode) { s.set(mode); }
+    private void setBindKey(BindSetting s, int key) { s.setKey(key); }
+    private void setText(TextSetting s, String value) { s.setText(value); }
 }
-
