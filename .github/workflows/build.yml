@@ -28,5 +28,3 @@ jobs:
         with:
           name: build-output
           path: build/libs/*.jar
-0
-
