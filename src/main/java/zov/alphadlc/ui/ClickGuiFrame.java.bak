@@ -325,8 +325,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     private float guiScale() {
         for (var module : zov.alphadlc.AlphaDLC.getInstance().getModuleStorage().getModules()) {
             if (module instanceof ClickGui clickGui) {
-                return (float) clickGui.size.getValue();
-
+                return clickGui.size.getValue().floatValue();
             }
         }
         return 1.0f;
