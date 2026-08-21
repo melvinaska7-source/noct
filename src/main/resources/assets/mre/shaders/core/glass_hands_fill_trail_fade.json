@@ -1,0 +1,18 @@
+{
+  "vertex": "mre:core/glass_hands",
+  "fragment": "mre:core/glass_hands_fill_trail_fade",
+  "samplers": [
+    { "name": "Sampler0" }
+  ],
+  "uniforms": [
+    { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1] },
+    { "name": "ProjMat",      "type": "matrix4x4", "count": 16, "values": [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1] },
+    { "name": "offset",   "type": "float", "count": 2, "values": [0.0, 0.0] },
+    { "name": "texSize",  "type": "float", "count": 2, "values": [960.0, 540.0] },
+    { "name": "fade",     "type": "float", "count": 1, "values": [0.009] },
+    { "name": "t",        "type": "float", "count": 1, "values": [0.0] },
+    { "name": "dt",       "type": "float", "count": 1, "values": [0.016] },
+    { "name": "turb",     "type": "float", "count": 1, "values": [0.0] },
+    { "name": "flickAmp", "type": "float", "count": 1, "values": [0.0] }
+  ]
+}

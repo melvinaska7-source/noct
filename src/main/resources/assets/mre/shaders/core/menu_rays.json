@@ -1,0 +1,13 @@
+{
+    "vertex": "mre:core/menu_rays",
+    "fragment": "mre:core/menu_rays",
+    "samplers": [],
+    "uniforms": [
+        { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "ProjMat",      "type": "matrix4x4", "count": 16, "values": [ 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0 ] },
+        { "name": "Resolution",   "type": "float",     "count": 2,  "values": [ 1920.0, 1080.0 ] },
+        { "name": "Time",         "type": "float",     "count": 1,  "values": [ 0.0 ] },
+        { "name": "Alpha",        "type": "float",     "count": 1,  "values": [ 1.0 ] },
+        { "name": "RayColor",     "type": "float",     "count": 3,  "values": [ 0.72, 0.72, 0.72 ] }
+    ]
+}

@@ -1,0 +1,65 @@
+package zov.alphadlc.mixin;
+
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.client.network.ClientPlayerInteractionManager;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Direction;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import zov.alphadlc.event.list.EventAttack;
+import zov.alphadlc.event.list.EventAttackBlock;
+import zov.alphadlc.event.list.EventRightClickBlock;
+import zov.alphadlc.module.list.player.FakePlayer;
+import zov.alphadlc.util.base.Instance;
+
+@Mixin(ClientPlayerInteractionManager.class)
+public class ClientPlayerInteractionManagerMixin {
+    @Inject(method = "attackEntity", at = @At(value = "HEAD"), cancellable = true)
+    private void attackEntity(PlayerEntity player, Entity target, CallbackInfo ci) {
+        // Наш fake определяем по identity (== fakePlayer), а не по instanceof OtherClientPlayerEntity:
+        // так удар обрабатывается локально и мы не шлём серверу неизвестный entityId.
+        FakePlayer fakePlayer = Instance.get(FakePlayer.class);
+        if (fakePlayer != null && fakePlayer.isEnabled() && fakePlayer.owns(target)) {
+            fakePlayer.handleLocalAttack(player);
+            ci.cancel();
+            return;
+        }
+
+        var event = new EventAttack(target);
+        event.post();
+        if (event.isCancelled()) ci.cancel();
+    }
+
+    @Inject(
+            method = "interactBlock",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void onInteractBlock(ClientPlayerEntity player, Hand hand, BlockHitResult hitResult, CallbackInfoReturnable<ActionResult> cir) {
+        var event = new EventRightClickBlock(hand, hitResult);
+        event.post();
+        if (event.isCancelled()) cir.setReturnValue(ActionResult.FAIL);
+    }
+
+
+    @Inject(
+            method = "attackBlock",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/world/ClientWorld;getBlockState(Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/block/BlockState;",
+                    ordinal = 1
+            )
+    )
+    private void autoToolBeforeStartBreaking(BlockPos pos, Direction direction, CallbackInfoReturnable<Boolean> cir) {
+        var event = new EventAttackBlock();
+        event.post();
+    }
+}

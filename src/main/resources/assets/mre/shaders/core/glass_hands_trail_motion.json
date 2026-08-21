@@ -1,0 +1,22 @@
+{
+  "vertex": "mre:core/glass_hands",
+  "fragment": "mre:core/glass_hands_trail_motion",
+  "samplers": [
+    { "name": "Sampler0" },
+    { "name": "Sampler1" },
+    { "name": "Sampler2" }
+  ],
+  "uniforms": [
+    { "name": "ModelViewMat",    "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "ProjMat",         "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "color",           "type": "float", "count": 3, "values": [1.0, 1.0, 1.0] },
+    { "name": "color2",          "type": "float", "count": 3, "values": [1.0, 1.0, 1.0] },
+    { "name": "texelSize",       "type": "float", "count": 2, "values": [0.001, 0.001] },
+    { "name": "trailLength",     "type": "float", "count": 1, "values": [10.0] },
+    { "name": "trailIntensity",  "type": "float", "count": 1, "values": [1.0] },
+    { "name": "glowSize",        "type": "float", "count": 1, "values": [2.0] },
+    { "name": "time",            "type": "float", "count": 1, "values": [0.0] },
+    { "name": "useItemColor",    "type": "float", "count": 1, "values": [0.0] },
+    { "name": "cameraMotion",    "type": "float", "count": 2, "values": [0.0, 0.0] }
+  ]
+}

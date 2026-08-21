@@ -1,0 +1,20 @@
+{
+  "vertex": "mre:core/sky",
+  "fragment": "mre:core/sky",
+  "uniforms": [
+    { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "AnimTime", "type": "float", "count": 1, "values": [0.0] },
+    { "name": "SkyMode", "type": "float", "count": 1, "values": [0.0] },
+    { "name": "StarDensity", "type": "float", "count": 1, "values": [0.7] },
+    { "name": "NebulaStrength", "type": "float", "count": 1, "values": [0.8] },
+    { "name": "NebIntensity", "type": "float", "count": 1, "values": [0.8] },
+    { "name": "SkyZenith", "type": "float", "count": 3, "values": [0.05, 0.1, 0.3] },
+    { "name": "SkyHorizon", "type": "float", "count": 3, "values": [0.3, 0.4, 0.6] },
+    { "name": "NebColor1", "type": "float", "count": 3, "values": [0.8, 0.3, 0.9] },
+    { "name": "NebColor2", "type": "float", "count": 3, "values": [0.3, 0.8, 1.0] },
+    { "name": "StarColor", "type": "float", "count": 3, "values": [0.9, 0.9, 1.0] },
+    { "name": "PlasmaScale", "type": "float", "count": 1, "values": [1.0] },
+    { "name": "PlasmaSpeed", "type": "float", "count": 1, "values": [1.0] }
+  ]
+}

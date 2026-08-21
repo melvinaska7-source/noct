@@ -1,0 +1,14 @@
+{
+  "vertex": "mre:core/sky",
+  "fragment": "mre:core/sky_matrix",
+  "uniforms": [
+    { "name": "ModelViewMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "ProjMat", "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "iTime", "type": "float", "count": 1, "values": [0.0] },
+    { "name": "uColor", "type": "float", "count": 3, "values": [0.0, 1.0, 0.5] },
+    { "name": "uShowStars", "type": "int", "count": 1, "values": [1] },
+    { "name": "uIntensity", "type": "float", "count": 1, "values": [1.0] },
+    { "name": "SkyFogColor", "type": "float", "count": 3, "values": [0.63, 0.63, 0.63] },
+    { "name": "FogDensity", "type": "float", "count": 1, "values": [0.75] }
+  ]
+}

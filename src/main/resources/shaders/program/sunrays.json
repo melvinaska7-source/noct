@@ -1,0 +1,13 @@
+{
+  "blend": {
+    "func": "add",
+    "srcrgb": "srcalpha",
+    "dstrgb": "1-srcalpha"
+  },
+  "vertex": "wonderful:sunrays",
+  "fragment": "wonderful:sunrays",
+  "uniforms": [
+    { "name": "u_Time", "type": "float", "count": 1, "values": [0.0] },
+    { "name": "u_Resolution", "type": "float", "count": 2, "values": [1920.0, 1080.0] }
+  ]
+}

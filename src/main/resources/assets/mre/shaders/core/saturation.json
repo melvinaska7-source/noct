@@ -1,0 +1,13 @@
+{
+  "vertex": "mre:core/saturation",
+  "fragment": "mre:core/saturation",
+  "samplers": [
+    { "name": "Sampler0" }
+  ],
+  "uniforms": [
+    { "name": "ModelViewMat",  "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "ProjMat",       "type": "matrix4x4", "count": 16, "values": [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0] },
+    { "name": "u_Saturation",  "type": "float",     "count": 1,  "values": [1.0] },
+    { "name": "u_Resolution",  "type": "float",     "count": 2,  "values": [1920.0, 1080.0] }
+  ]
+}

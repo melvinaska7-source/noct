@@ -1,7 +1,27 @@
+# Gradle
 .gradle/
 build/
-run/
-cfr_out/
 out/
+classes/
+
+# Fabric
+run/
+
+# IDE
 .idea/
 *.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+hs_err_pid*
