@@ -33,23 +33,18 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     private final ThemeEditor themeEditor = new ThemeEditor();
     private ItemModelGalleryPopup itemModelGallery;
 
-    // Плавное описание модуля
     private final Animation descAnim = new Animation(Easing.QUINTIC_OUT, 220);
     private String lastDesc = null;
 
-    // Анимация закрытия
     private boolean closing = false;
 
-    // === АНИМАЦИЯ ОТКРЫТИЯ ВСЕГО GUI ===
     private final Animation globalOpenAnim = new Animation(Easing.BACK_OUT, 450);
     private boolean firstRender = true;
 
-    // Курсоры
     private long handCursor, iBeamCursor, pointingCursor, arrowCursor;
     private boolean cursorsCreated = false;
     private long currentCursor = 0L;
 
-    // Кэш поиска
     private String cachedRawQuery = null;
     private String cachedNormalizedQuery = "";
 
@@ -68,7 +63,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         currentCursor = cursor;
     }
 
-    // === ЗАПУСК АНИМАЦИИ ОТКРЫТИЯ ===
     public void playOpenAnimation() {
         closing = false;
         firstRender = true;
@@ -78,7 +72,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
             panel.slideAnim.reset(0f);
-            panel.slideDir = 1; // +1 = снизу
+            panel.slideDir = 1;
         }
         themeEditor.resetAppear();
         searchField.resetAppear();
@@ -101,7 +95,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         int windowWidth = mc.getWindow().getScaledWidth();
         int windowHeight = mc.getWindow().getScaledHeight();
 
-        // === ГЛОБАЛЬНАЯ АНИМАЦИЯ ОТКРЫТИЯ ===
         if (firstRender) {
             globalOpenAnim.run(1f);
             firstRender = false;
@@ -141,13 +134,11 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         float startX = (windowWidth - panelTotalWidth) / 2f;
         float panelY = (windowHeight - panelHeight) / 2f;
 
-        // === АНИМАЦИЯ ВЫЛЕТА ПАНЕЛЕЙ ===
         float offscreen = windowHeight / 2f + panelHeight;
 
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
 
-            // Задержка для каждой панели (stagger)
             float panelDelay = i * 0.04f;
             float panelProgress;
 
@@ -158,14 +149,11 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
                 panelProgress = MathHelper.clamp((globalProgress - reverseDelay) / 0.7f, 0f, 1f);
             }
 
-            // Применяем easing через Animation (которая сама использует Easing)
-            // Создаём временную анимацию для easing-вычисления
             panel.slideAnim.setValue(panelProgress);
 
             float slide = MathHelper.clamp(panel.slideAnim.getValue(), 0f, 1f);
             float yOffset = (1f - slide) * panel.slideDir * offscreen;
 
-            // Эффект подпрыгивания
             float bounce = 0f;
             if (!closing && slide > 0.01f && slide < 0.99f) {
                 bounce = (float) Math.sin(slide * Math.PI) * 3f * (1f - slide);
@@ -179,7 +167,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
             panel.render(context, mouseX, mouseY, delta);
         }
 
-        // === ПОИСК ===
         float searchW = 90;
         float searchH = 18;
         float searchX = windowWidth / 2f - searchW / 2f;
@@ -188,7 +175,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         searchField.setBounds(searchX, searchY, searchW, searchH);
         searchField.render(context, mouseX, mouseY, delta);
 
-        // === ОПИСАНИЕ МОДУЛЯ ===
         String hoveredDesc = null;
         for (Panel panel : panels) {
             boolean isMouseInPanel = HoverUtil.isHovered(mouseX, mouseY, panel.getX(), panel.getY(), panel.getWidth(), panel.getHeight());
@@ -337,9 +323,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     private float guiScale() {
-        // Получаем scale из модуля ClickGui
-        // ClickGui — это Module, у него есть поле size (SliderSetting)
-        // Нужно получить экземпляр модуля
         for (var module : zov.alphadlc.AlphaDLC.getInstance().getModuleStorage().getModules()) {
             if (module instanceof ClickGui clickGui) {
                 return clickGui.size.getValue().floatValue();

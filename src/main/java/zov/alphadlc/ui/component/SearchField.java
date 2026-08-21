@@ -14,16 +14,14 @@ import zov.alphadlc.util.render.renderers.DrawUtil;
 @Getter
 public class SearchField implements IMinecraft {
 
-    private String text = "";
+    // Package-private для совместимости с ItemModelGalleryPopup
+    String text = "";
     private String placeholder;
     private boolean focused = false;
     private float x, y, width, height;
 
-    // Анимация появления (выезд снизу)
     private final Animation appearAnim = new Animation(Easing.QUINTIC_OUT, 340);
-    // Анимация фокуса
     private final Animation focusAnim = new Animation(Easing.QUINTIC_OUT, 250);
-    // Курсор мигания
     private long lastCursorToggle = 0;
     private boolean cursorVisible = true;
 
