@@ -79,7 +79,7 @@ public class ClickGuiState {
 
     public void updatePosition(Window window, int categoryCount) {
         this.x = (float)window.getScaledWidth() / 2.0f - 235.0f;
-        this.y = (float)window.getScaledHeight() / 2.0f - 165.0f;
+        this.y = (float)window.getScaledHeight() / 2.0f - 130.0f;
     }
 
     public float getX() {
