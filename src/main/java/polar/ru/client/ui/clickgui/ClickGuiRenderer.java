@@ -15,6 +15,7 @@ import polar.ru.api.utils.scissor.ScissorUtils;
 import polar.ru.client.modules.Module;
 import polar.ru.client.modules.settings.Setting;
 import polar.ru.client.modules.settings.implement.BindSetting;
+import polar.ru.client.modules.settings.implement.BooleanSetting;
 import polar.ru.client.ui.MenuPanel;
 import polar.ru.polar;
 
@@ -263,7 +264,7 @@ public class ClickGuiRenderer {
         public Module module;
         public Setting setting;
         public String modeValue;
-        public polar.ru.client.modules.settings.implement.BooleanSetting listEntry;
+        public BooleanSetting listEntry;
         public Module.ModuleCategory category;
 
         private Region(Type type, float x, float y, float w, float h) {
@@ -275,7 +276,7 @@ public class ClickGuiRenderer {
         public Region module(Module m) { this.module = m; return this; }
         public Region setting(Setting s) { this.setting = s; return this; }
         public Region modeValue(String v) { this.modeValue = v; return this; }
-        public Region listEntry(polar.ru.client.modules.settings.implement.BooleanSetting e) { this.listEntry = e; return this; }
+        public Region listEntry(BooleanSetting e) { this.listEntry = e; return this; }
         public Region category(Module.ModuleCategory c) { this.category = c; return this; }
         public boolean contains(double mx, double my) {
             return mx >= x && mx <= x + w && my >= y && my <= y + h;
