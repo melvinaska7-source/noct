@@ -38,8 +38,9 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     private boolean closing = false;
 
+    // === АНИМАЦИЯ ОТКРЫТИЯ ===
     private final Animation globalOpenAnim = new Animation(Easing.BACK_OUT, 450);
-    private boolean firstRender = true;
+    private boolean needsOpenAnimation = true;
 
     private long handCursor, iBeamCursor, pointingCursor, arrowCursor;
     private boolean cursorsCreated = false;
@@ -65,7 +66,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     public void playOpenAnimation() {
         closing = false;
-        firstRender = true;
+        needsOpenAnimation = true;
         globalOpenAnim.reset(0f);
         itemModelGallery = null;
 
@@ -95,18 +96,22 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         int windowWidth = mc.getWindow().getScaledWidth();
         int windowHeight = mc.getWindow().getScaledHeight();
 
-        if (firstRender) {
+        // === АНИМАЦИЯ ===
+        if (needsOpenAnimation) {
             globalOpenAnim.run(1f);
-            firstRender = false;
-        } else {
-            globalOpenAnim.run(closing ? 0f : 1f);
+            if (globalOpenAnim.getValue() >= 0.99f) {
+                needsOpenAnimation = false;
+            }
+        } else if (closing) {
+            globalOpenAnim.run(0f);
         }
 
         float globalProgress = (float) globalOpenAnim.getValue();
 
+        // Закрытие после анимации
         if (closing && globalProgress < 0.02f) {
             closing = false;
-            close();
+            forceCloseScreen();
             return;
         }
 
@@ -304,8 +309,9 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         globalOpenAnim.run(0f);
     }
 
-    public void forceClose() {
-        super.close();
+    // Принудительное закрытие без анимации
+    private void forceCloseScreen() {
+        mc.setScreen(null);
     }
 
     public void openItemModelGallery(ItemModelSetting setting) {
@@ -326,7 +332,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         for (var module : zov.alphadlc.AlphaDLC.getInstance().getModuleStorage().getModules()) {
             if (module instanceof ClickGui clickGui) {
                 return (float) clickGui.size.getValue();
-
             }
         }
         return 1.0f;

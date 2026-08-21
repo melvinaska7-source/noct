@@ -64,7 +64,8 @@ public class Panel implements IMinecraft {
         animationAlpha.setValue(alphaRatio);
         float alpha = Math.min(255 * alphaRatio, 255);
 
-        if (alpha < 1f) return;
+        // УБРАНО: if (alpha < 1f) return;
+        // Теперь панели рисуются даже при alpha = 0 (но с прозрачностью 0)
 
         float cornerRadius = 8f;
         float headerHeight = 25f;
