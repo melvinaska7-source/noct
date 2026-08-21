@@ -5,7 +5,6 @@ import java.util.List;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.Window;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 import polar.ru.api.utils.color.ColorUtils;
 import polar.ru.api.utils.input.KeyBoardUtils;
@@ -16,26 +15,29 @@ import polar.ru.api.utils.scissor.ScissorUtils;
 import polar.ru.client.modules.Module;
 import polar.ru.client.modules.settings.Setting;
 import polar.ru.client.modules.settings.implement.BindSetting;
-import polar.ru.client.modules.settings.implement.BooleanSetting;
 import polar.ru.client.ui.MenuPanel;
-import polar.ru.client.ui.clickgui.ClickGuiFiguraPanel;
-import polar.ru.client.ui.clickgui.ClickGuiLayout;
-import polar.ru.client.ui.clickgui.ClickGuiSettingRenderer;
-import polar.ru.client.ui.clickgui.ClickGuiState;
-import polar.ru.client.ui.clickgui.ClickGuiThemeSelector;
 import polar.ru.polar;
 
 public class ClickGuiRenderer {
-    private static final Identifier POLAR_LOGO = Identifier.of((String)"polar", (String)"polar.png");
     private final ClickGuiState state;
     private final ClickGuiSettingRenderer settingRenderer;
     private final ClickGuiThemeSelector themeSelector;
     private final ClickGuiFiguraPanel figuraPanel;
     private final MenuPanel menuPanel;
-    private final List<Region> regions = new ArrayList<Region>();
+    private final List<Region> regions = new ArrayList<>();
     private float contentHeight;
 
-    public ClickGuiRenderer(ClickGuiState state, ClickGuiSettingRenderer settingRenderer, ClickGuiThemeSelector themeSelector, ClickGuiFiguraPanel figuraPanel, MenuPanel menuPanel) {
+    private static final float W = 470.0f;
+    private static final float H = 330.0f;
+    private static final float PAD = 8.0f;
+    private static final float GAP = 6.0f;
+    private static final float PANEL_W = 145.0f;
+    private static final float PANEL_H = 150.0f;
+    private static final float HEADER_H = 24.0f;
+
+    public ClickGuiRenderer(ClickGuiState state, ClickGuiSettingRenderer settingRenderer,
+                            ClickGuiThemeSelector themeSelector, ClickGuiFiguraPanel figuraPanel,
+                            MenuPanel menuPanel) {
         this.state = state;
         this.settingRenderer = settingRenderer;
         this.themeSelector = themeSelector;
@@ -44,302 +46,242 @@ public class ClickGuiRenderer {
     }
 
     public List<Region> getRegions() {
-        return this.regions;
+        return regions;
     }
 
     public float getContentHeight() {
-        return this.contentHeight;
+        return contentHeight;
     }
 
     public void render(DrawContext context, int mouseX, int mouseY, Window window, float animationProgress) {
-        if (window == null) {
-            return;
-        }
-        this.regions.clear();
-        float a2 = MathHelper.clamp((float)animationProgress, (float)0.0f, (float)1.0f);
-        int theme = this.getThemeColor();
-        float x2 = this.state.getX();
-        float y2 = this.state.getY();
-        for (Module.ModuleCategory category : Module.ModuleCategory.values()) {
-            this.state.getCategorySwitchAnimation(category).update(category == this.state.getSelectedCategory() ? 1.0f : 0.0f);
-        }
+        if (window == null) return;
+
+        regions.clear();
+        float a = MathHelper.clamp(animationProgress, 0.0f, 1.0f);
+        state.updatePosition(window, Module.ModuleCategory.values().length);
+
+        float x = state.getX();
+        float y = state.getY();
+        int theme = getThemeColor();
+
         context.getMatrices().push();
-        float centerX = x2 + 235.0f;
-        float centerY = y2 + 130.0f;
-        float scale = 0.92f + 0.08f * a2;
-        context.getMatrices().translate(centerX, centerY, 0.0f);
+        float cx = x + W / 2.0f;
+        float cy = y + H / 2.0f;
+        float scale = 0.94f + 0.06f * a;
+        context.getMatrices().translate(cx, cy, 0.0f);
         context.getMatrices().scale(scale, scale, 1.0f);
-        context.getMatrices().translate(-centerX, -centerY, 0.0f);
-        this.renderMain(context, x2, y2, theme, a2, mouseX, mouseY);
+        context.getMatrices().translate(-cx, -cy, 0.0f);
+
+        int bg = ColorUtils.rgba(10, 10, 14, (int)(242 * a));
+        RenderUtils.drawRoundedRect(context.getMatrices(), x, y, W, H, 10.0f, bg);
+        RenderUtils.drawRoundedRect(context.getMatrices(), x + 1, y + 1, W - 2, 2.0f, 1.0f,
+                ColorUtils.setAlphaColor(theme, (int)(85 * a)));
+
+        Font title = font(16);
+        if (title != null) {
+            title.draw(context.getMatrices(), "ClickGUI", x + 12, y + 9,
+                    ColorUtils.setAlphaColor(-1, (int)(245 * a)));
+        }
+        Font sub = font(11);
+        if (sub != null) {
+            sub.draw(context.getMatrices(), "Modules", x + 78, y + 11,
+                    ColorUtils.rgba(130, 130, 145, (int)(190 * a)));
+        }
+
+        Module.ModuleCategory[] categories = Module.ModuleCategory.values();
+        float gridTop = y + 34.0f;
+        for (int i = 0; i < categories.length; i++) {
+            Module.ModuleCategory category = categories[i];
+            int col = i % 3;
+            int row = i / 3;
+            float panelX = x + PAD + col * (PANEL_W + GAP);
+            float panelY = gridTop + row * (PANEL_H + GAP);
+            renderCategory(context, category, panelX, panelY, PANEL_W, PANEL_H, theme, a, mouseX, mouseY);
+        }
+
+        renderSearch(context, x, y, theme, a);
+
         context.getMatrices().pop();
     }
 
-    private void renderMain(DrawContext context, float menuX, float menuY, int theme, float a2, double mouseX, double mouseY) {
-        float x2 = menuX;
-        float w2 = 470.0f;
-        float h2 = 260.0f;
-        float y2 = menuY;
-        int hud2BgColor = ColorUtils.rgba(14, 14, 18, (int)(250.0f * a2));
-        RenderUtils.drawRoundedRect(context.getMatrices(), x2, y2, w2, h2, 9.0f, hud2BgColor);
-        RenderUtils.drawTexture(context.getMatrices(), POLAR_LOGO, x2 + 9.0f + 30.0f, y2 + 10.0f + 12.0f, 24.0f, 24.0f, 0.0f, 0.0f, 1.0f, 1.0f, -1);
-        float px = x2 + 9.0f;
-        float py = y2 + 234.0f;
-        float avatarY = py - 1.5f;
-        RenderUtils.drawRoundedRect(context.getMatrices(), px, avatarY, 18.0f, 18.0f, 4.0f, ColorUtils.setAlphaColor(theme, (int)(60.0f * a2)));
-        String username = MinecraftClient.getInstance().getSession().getUsername();
-        String initial = username.isEmpty() ? "?" : username.substring(0, 1).toUpperCase();
-        this.font(12).drawCenteredString(context.getMatrices(), initial, px + 9.0f, avatarY + (18.0f - this.font(12).getHeight()) / 2.0f, ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)));
-        float nameX = px + 18.0f + 6.0f;
-        this.font(12).draw(context.getMatrices(), username, nameX, py + 0.5f, ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)));
-        this.font(12).draw(context.getMatrices(), "Admin", nameX, py + 9.5f, ColorUtils.rgba(140, 140, 155, (int)(200.0f * a2)));
-        float catX = x2 + 9.0f - 3.0f;
-        float catY = y2 + 62.0f;
-        float catW = 88.0f;
-        int index = 0;
-        for (Module.ModuleCategory category : Module.ModuleCategory.values()) {
-            if ("LUA".equals(category.name())) continue;
-            if (index == 0) {
-                this.font(12).draw(context.getMatrices(), "Main", x2 + 9.0f, catY, ColorUtils.rgba(120, 120, 132, (int)(180.0f * a2)));
-                catY += 12.0f;
-            } else if (index == 2) {
-                this.font(12).draw(context.getMatrices(), "Other", x2 + 9.0f, catY += 3.0f, ColorUtils.rgba(120, 120, 132, (int)(180.0f * a2)));
-                catY += 14.0f;
-            }
-            float selectP = this.state.getCategorySwitchAnimation(category).getValue();
-            if (selectP > 0.001f) {
-                RenderUtils.drawRoundedRect(context.getMatrices(), catX, catY, catW, 19.0f, 6.0f, ColorUtils.setAlphaColor(theme, (int)(40.0f * selectP * a2)));
-            }
-            int iconColor = ColorUtils.interpolateColor(ColorUtils.rgba(170, 170, 185, (int)(160.0f * a2)), ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)), selectP);
-            int textColor = ColorUtils.interpolateColor(ColorUtils.rgba(200, 200, 210, (int)(170.0f * a2)), ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)), selectP);
-            float itemCenterY = catY + 9.5f;
-            this.icons(10).drawCenteredString(context.getMatrices(), category.getIcons(), catX + 13.0f, itemCenterY - this.icons(10).getHeight() / 2.0f, iconColor);
-            String categoryName = category.name();
-            String formattedName = categoryName.isEmpty() ? "" : categoryName.substring(0, 1).toUpperCase() + (categoryName.length() > 1 ? categoryName.substring(1).toLowerCase() : "");
-            this.font(12).draw(context.getMatrices(), formattedName, catX + 32.0f, itemCenterY - this.font(12).getHeight() / 2.0f, textColor);
-            this.regions.add(Region.of(Region.Type.CATEGORY, catX, catY, catW, 19.0f).category(category));
-            catY += 22.0f;
-            ++index;
+    private void renderCategory(DrawContext context, Module.ModuleCategory category,
+                                float panelX, float panelY, float width, float height,
+                                int theme, float a, int mouseX, int mouseY) {
+        int panelBg = ColorUtils.rgba(18, 18, 24, (int)(238 * a));
+        RenderUtils.drawRoundedRect(context.getMatrices(), panelX, panelY, width, height, 7.0f, panelBg);
+        RenderUtils.drawRoundedRect(context.getMatrices(), panelX, panelY, 3.0f, height, 1.5f,
+                ColorUtils.setAlphaColor(theme, (int)(145 * a)));
+
+        Font icon = icons(10);
+        Font f = font(12);
+        String catName = category.getName();
+        if (f != null) {
+            f.draw(context.getMatrices(), catName, panelX + 9, panelY + 7,
+                    ColorUtils.setAlphaColor(-1, (int)(235 * a)));
         }
-        float breadcrumbX = x2 + 100.0f + 6.0f;
-        float breadcrumbY = y2 + 10.0f;
-        String prefix = "Lavanda > ";
-        this.font(12).draw(context.getMatrices(), prefix, breadcrumbX, breadcrumbY, ColorUtils.rgba(140, 140, 155, (int)(180.0f * a2)));
-        float catTextX = breadcrumbX + this.font(12).getWidth(prefix);
-        for (Module.ModuleCategory cat : Module.ModuleCategory.values()) {
-            float catP;
-            if ("LUA".equals(cat.name()) || !((catP = this.state.getCategorySwitchAnimation(cat).getValue()) > 0.001f)) continue;
-            String cName = cat.name();
-            String formattedCName = cName.isEmpty() ? "" : cName.substring(0, 1).toUpperCase() + (cName.length() > 1 ? cName.substring(1).toLowerCase() : "");
-            this.font(12).draw(context.getMatrices(), formattedCName, catTextX, breadcrumbY, ColorUtils.setAlphaColor(-1, (int)(220.0f * catP * a2)));
+        if (icon != null) {
+            icon.drawCenteredString(context.getMatrices(), category.getIcons(),
+                    panelX + width - 11, panelY + 11 - icon.getHeight() / 2.0f,
+                    ColorUtils.setAlphaColor(theme, (int)(220 * a)));
         }
-        float searchX = x2 + 100.0f + 8.0f;
-        float searchY = y2 + 24.0f;
-        float searchW = w2 - 100.0f - 16.0f;
-        int searchBg = this.state.isSearchActive() ? ColorUtils.rgba(26, 26, 33, (int)(245.0f * a2)) : ColorUtils.rgba(20, 20, 26, (int)(245.0f * a2));
-        RenderUtils.drawRoundedRect(context.getMatrices(), searchX, searchY, searchW, 18.0f, 6.0f, searchBg);
-        String text = this.state.getSearchText();
-        float textX = searchX + 10.0f;
-        float textY = searchY + (18.0f - this.font(12).getHeight()) / 2.0f;
-        if (text.isEmpty() && !this.state.isSearchActive()) {
-            this.font(12).draw(context.getMatrices(), "Поиск", textX, textY, ColorUtils.rgba(130, 130, 145, (int)(170.0f * a2)));
-        } else {
-            this.font(12).draw(context.getMatrices(), text, textX, textY, ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)));
-            if (this.state.isSearchActive() && System.currentTimeMillis() / 500L % 2L == 0L) {
-                float cursorX = textX + this.font(12).getWidth(text.substring(0, this.state.getSearchCursor())) + 1.0f;
-                RenderUtils.drawRoundedRect(context.getMatrices(), cursorX, searchY + 4.0f, 1.0f, 10.0f, 0.5f, ColorUtils.setAlphaColor(theme, (int)(255.0f * a2)));
-            }
-        }
-        this.regions.add(Region.of(Region.Type.SEARCH, searchX, searchY, searchW, 18.0f));
-        Module.ModuleCategory category = this.state.getSelectedCategory();
-        float scroll = this.state.getScroll(category);
-        float contentTop = ClickGuiLayout.contentTop(y2);
-        float contentBottom = ClickGuiLayout.contentBottom(y2);
-        float colW = ClickGuiLayout.columnWidth();
-        float col0X = x2 + 100.0f + 8.0f;
-        float col1X = col0X + colW + 6.0f;
+
+        regions.add(Region.of(Region.Type.CATEGORY, panelX, panelY, width, height).category(category));
+
+        float innerX = panelX + 7;
+        float innerY = panelY + HEADER_H;
+        float innerW = width - 14;
+        float innerH = height - HEADER_H - 5;
+        List<Module> modules = state.getModules(category);
+
+        float scroll = state.getScroll(category);
+        float cursor = innerY + scroll;
+        float total = 0.0f;
+
         ScissorUtils.push();
-        ScissorUtils.setFromComponentCoordinates(x2, contentTop - 2.0f, w2, contentBottom - contentTop + 4.0f);
-        float[] colHeights = new float[]{0.0f, 0.0f};
-        for (Module module : this.state.getModules(category)) {
-            int col = colHeights[0] <= colHeights[1] ? 0 : 1;
-            float cardX = col == 0 ? col0X : col1X;
-            float cardY = contentTop + scroll + colHeights[col];
-            float openProgress = this.state.getOpenProgress(module);
-            float settingsH = this.settingRenderer.measureSettingsHeight(module, colW) * openProgress;
-            float cardH = 22.0f + (openProgress > 0.001f ? settingsH : 0.0f);
-            boolean cardHovered = mouseX >= (double)cardX && mouseX <= (double)(cardX + colW) && mouseY >= (double)cardY && mouseY <= (double)(cardY + cardH);
-            float cardHoverP = this.state.getHoverAnimation("card_scale_" + module.getName(), cardHovered).getValue();
-            float cardScale = 1.0f + 0.012f * cardHoverP;
-            context.getMatrices().push();
-            float cardCenterX = cardX + colW / 2.0f;
-            float cardCenterY = cardY + cardH / 2.0f;
-            context.getMatrices().translate(cardCenterX, cardCenterY, 0.0f);
-            context.getMatrices().scale(cardScale, cardScale, 1.0f);
-            context.getMatrices().translate(-cardCenterX, -cardCenterY, 0.0f);
-            this.renderCard(context, module, cardX, cardY, colW, cardH, theme, a2, mouseX, mouseY, openProgress);
-            context.getMatrices().pop();
-            int n2 = col;
-            colHeights[n2] = colHeights[n2] + (cardH + 6.0f);
+        ScissorUtils.setFromComponentCoordinates(panelX, innerY, width, innerH);
+
+        for (Module module : modules) {
+            float open = state.getOpenProgress(module);
+            float settingsH = module.isOpen() ? settingRenderer.measureSettingsHeight(module, innerW) * open : 0.0f;
+            float cardH = 20.0f + settingsH;
+            float cardY = cursor;
+
+            if (cardY + cardH >= innerY - 2 && cardY <= innerY + innerH + 2) {
+                renderModule(context, module, innerX, cardY, innerW, cardH, theme, a, mouseX, mouseY, open);
+            }
+
+            cursor += cardH + 5.0f;
+            total += cardH + 5.0f;
         }
+
         ScissorUtils.pop();
-        this.contentHeight = Math.max(colHeights[0], colHeights[1]) - 6.0f;
-        this.state.clampScrollPixels(category, contentBottom - contentTop, this.contentHeight);
+        state.clampScrollPixels(category, innerH, Math.max(0.0f, total - 5.0f));
     }
 
-    private void renderCard(DrawContext context, Module module, float x2, float y2, float w2, float h2, int theme, float a2, double mouseX, double mouseY, float openProgress) {
+    private void renderModule(DrawContext context, Module module, float x, float y, float width,
+                              float height, int theme, float a, double mouseX, double mouseY,
+                              float openProgress) {
         boolean enabled = module.isEnable();
-        boolean hovered = mouseX >= (double)x2 && mouseX <= (double)(x2 + w2) && mouseY >= (double)y2 && mouseY <= (double)(y2 + 22.0f);
-        float hoverP = this.state.getHoverAnimation("module_" + module.getName(), hovered).getValue();
-        RenderUtils.drawRoundedRect(context.getMatrices(), x2, y2, w2, h2, 7.0f, ColorUtils.rgba(20, 20, 26, (int)((235.0f + 20.0f * hoverP) * a2)));
-        float textLeft = x2 + 8.0f;
-        float headerIconY = y2 + (22.0f - this.icons(10).getHeight()) / 2.0f;
-        this.icons(10).drawCenteredString(context.getMatrices(), module.getCategory().getIcons(), textLeft + 4.0f, headerIconY, enabled ? ColorUtils.setAlphaColor(theme, (int)(255.0f * a2)) : ColorUtils.rgba(150, 150, 165, (int)(180.0f * a2)));
-        String name = this.translate(module.getName());
-        int nameColor = enabled ? ColorUtils.setAlphaColor(-1, (int)(255.0f * a2)) : ColorUtils.rgba(205, 205, 215, (int)(200.0f * a2));
-        float cardTextY = y2 + (22.0f - this.font(13).getHeight()) / 2.0f;
-        this.font(13).draw(context.getMatrices(), name, textLeft += 12.0f, cardTextY, nameColor);
-        String bindLabel = this.findModuleBindLabel(module);
-        if (bindLabel != null && !bindLabel.isEmpty()) {
-            float bindLabelY = y2 + (22.0f - this.font(12).getHeight()) / 2.0f;
-            this.font(12).draw(context.getMatrices(), bindLabel, x2 + w2 - 8.0f - this.font(12).getWidth(bindLabel), bindLabelY, ColorUtils.rgba(140, 140, 152, (int)(190.0f * a2)));
+        boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + 20.0f;
+        float hover = state.getHoverAnimation("ref_module_" + module.getName(), hovered).getValue();
+
+        int cardColor = ColorUtils.rgba(24, 24, 31, (int)((235 + 12 * hover) * a));
+        RenderUtils.drawRoundedRect(context.getMatrices(), x, y, width, height, 5.0f, cardColor);
+
+        if (enabled) {
+            RenderUtils.drawRoundedRect(context.getMatrices(), x, y, 2.0f, 20.0f, 1.0f,
+                    ColorUtils.setAlphaColor(theme, (int)(230 * a)));
         }
-        this.regions.add(Region.of(Region.Type.MODULE_HEADER, x2, y2, w2, 22.0f).module(module));
-        if (openProgress > 0.001f && h2 > 22.5f) {
-            int alpha = (int)(255.0f * a2 * openProgress);
+
+        Font f = font(11);
+        if (f != null) {
+            int textColor = enabled
+                    ? ColorUtils.setAlphaColor(-1, (int)(255 * a))
+                    : ColorUtils.rgba(185, 185, 195, (int)(210 * a));
+            f.draw(context.getMatrices(), translate(module.getName()), x + 7, y + 6, textColor);
+        }
+
+        Font bindFont = font(9);
+        String bind = findModuleBindLabel(module);
+        if (bindFont != null && bind != null && !bind.isEmpty()) {
+            float bw = bindFont.getWidth(bind);
+            bindFont.draw(context.getMatrices(), bind, x + width - bw - 6, y + 7,
+                    ColorUtils.rgba(125, 125, 140, (int)(190 * a)));
+        }
+
+        regions.add(Region.of(Region.Type.MODULE_HEADER, x, y, width, 20).module(module));
+
+        if (openProgress > 0.001f && height > 20.5f) {
+            int alpha = (int)(255 * a * openProgress);
             ScissorUtils.push();
-            ScissorUtils.setFromComponentCoordinates(x2, y2 + 22.0f, w2, h2 - 22.0f);
-            this.settingRenderer.render(context, module, x2, y2 + 22.0f, w2, theme, alpha, mouseX, mouseY, this.state, this.regions);
+            ScissorUtils.setFromComponentCoordinates(x, y + 20, width, Math.max(0, height - 20));
+            settingRenderer.render(context, module, x, y + 20, width, theme, alpha,
+                    mouseX, mouseY, state, regions);
             ScissorUtils.pop();
         }
+    }
+
+    private void renderSearch(DrawContext context, float x, float y, int theme, float a) {
+        float searchY = y + H - 24.0f;
+        float searchX = x + 9.0f;
+        float searchW = W - 18.0f;
+        int searchBg = ColorUtils.rgba(19, 19, 25, (int)(245 * a));
+        RenderUtils.drawRoundedRect(context.getMatrices(), searchX, searchY, searchW, 17.0f, 5.0f, searchBg);
+
+        Font f = font(11);
+        String text = state.getSearchText().isEmpty() ? "Search..." : state.getSearchText();
+        if (f != null) {
+            f.draw(context.getMatrices(), text, searchX + 8, searchY + 5,
+                    state.getSearchText().isEmpty()
+                            ? ColorUtils.rgba(120, 120, 135, (int)(190 * a))
+                            : ColorUtils.setAlphaColor(-1, (int)(245 * a)));
+        }
+        regions.add(Region.of(Region.Type.SEARCH, searchX, searchY, searchW, 17));
     }
 
     private String findModuleBindLabel(Module module) {
         try {
             List<Setting> settings = module.getSettings();
-            if (settings == null) {
-                return null;
+            if (settings == null) return null;
+            for (Setting s : settings) {
+                if (s instanceof BindSetting bind) {
+                    return state.toEnglish(KeyBoardUtils.getBindName(bind.getKey()));
+                }
             }
-            for (Setting s2 : settings) {
-                if (!(s2 instanceof BindSetting)) continue;
-                BindSetting bind = (BindSetting)s2;
-                String name = KeyBoardUtils.getBindName(bind.getKey());
-                return this.state.toEnglish(name);
-            }
-        }
-        catch (Throwable throwable) {
-            // empty catch block
-        }
+        } catch (Throwable ignored) {}
         return null;
     }
 
     private int getThemeColor() {
         try {
-            if (!polar.INSTANCE.themeStorage.getThemes().getTheme().getName().equals("Rainbow")) {
+            if (polar.INSTANCE != null && polar.INSTANCE.themeStorage != null
+                    && !polar.INSTANCE.themeStorage.getThemes().getTheme().getName().equals("Rainbow")) {
                 return polar.INSTANCE.themeStorage.getThemes().getTheme().color[0];
             }
-        }
-        catch (Throwable throwable) {
-            // empty catch block
-        }
+        } catch (Throwable ignored) {}
         return ColorUtils.getThemeColor();
     }
 
     private String translate(String key) {
-        if (polar.INSTANCE == null || polar.INSTANCE.localizationStorage == null) {
-            return key;
-        }
+        if (polar.INSTANCE == null || polar.INSTANCE.localizationStorage == null) return key;
         return polar.INSTANCE.localizationStorage.translate(key);
     }
 
     private Font font(int size) {
-        return ClickGuiLayout.font(size);
-    }
-
-    private Font fontTitle(int size) {
-        Font f2 = Fonts.getFont("moe3", size);
-        if (f2 == null) {
-            f2 = Fonts.getFont("moe3", 18);
-        }
-        if (f2 == null) {
-            f2 = ClickGuiLayout.font(13);
-        }
-        return f2;
+        Font f = Fonts.getFont("moe3", size);
+        return f != null ? f : Fonts.getFont("suisse", size);
     }
 
     private Font icons(int size) {
-        Font f2 = Fonts.getFont("icon", size);
-        if (f2 == null) {
-            f2 = Fonts.getFont("icon", 18);
-        }
-        return f2;
+        Font f = Fonts.getFont("icon", size);
+        return f != null ? f : font(size);
     }
 
     public static final class Region {
         public final Type type;
-        public final float x;
-        public final float y;
-        public final float w;
-        public final float h;
+        public final float x, y, w, h;
         public Module module;
         public Setting setting;
         public String modeValue;
-        public BooleanSetting listEntry;
+        public polar.ru.client.modules.settings.implement.BooleanSetting listEntry;
         public Module.ModuleCategory category;
 
-        private Region(Type type, float x2, float y2, float w2, float h2) {
-            this.type = type;
-            this.x = x2;
-            this.y = y2;
-            this.w = w2;
-            this.h = h2;
+        private Region(Type type, float x, float y, float w, float h) {
+            this.type = type; this.x = x; this.y = y; this.w = w; this.h = h;
         }
-
-        public static Region of(Type type, float x2, float y2, float w2, float h2) {
-            return new Region(type, x2, y2, w2, h2);
+        public static Region of(Type type, float x, float y, float w, float h) {
+            return new Region(type, x, y, w, h);
         }
-
-        public Region module(Module m2) {
-            this.module = m2;
-            return this;
-        }
-
-        public Region setting(Setting s2) {
-            this.setting = s2;
-            return this;
-        }
-
-        public Region modeValue(String v2) {
-            this.modeValue = v2;
-            return this;
-        }
-
-        public Region listEntry(BooleanSetting e2) {
-            this.listEntry = e2;
-            return this;
-        }
-
-        public Region category(Module.ModuleCategory c2) {
-            this.category = c2;
-            return this;
-        }
-
+        public Region module(Module m) { this.module = m; return this; }
+        public Region setting(Setting s) { this.setting = s; return this; }
+        public Region modeValue(String v) { this.modeValue = v; return this; }
+        public Region listEntry(polar.ru.client.modules.settings.implement.BooleanSetting e) { this.listEntry = e; return this; }
+        public Region category(Module.ModuleCategory c) { this.category = c; return this; }
         public boolean contains(double mx, double my) {
-            return mx >= (double)this.x && mx <= (double)(this.x + this.w) && my >= (double)this.y && my <= (double)(this.y + this.h);
+            return mx >= x && mx <= x + w && my >= y && my <= y + h;
         }
-
-        public static enum Type {
-            CATEGORY,
-            MODULE_HEADER,
-            TOGGLE,
-            CHIP_MODE,
-            CHIP_LIST,
-            SLIDER,
-            BIND,
-            TEXT,
-            SEARCH,
-            TEXT_INPUT;
-
+        public enum Type {
+            CATEGORY, MODULE_HEADER, TOGGLE, CHIP_MODE, CHIP_LIST, SLIDER, BIND, TEXT, SEARCH, TEXT_INPUT
         }
     }
 }
-
