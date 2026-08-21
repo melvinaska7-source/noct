@@ -24,10 +24,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 
-/**
- * Новый менеджер тем: панель «Theme» в правом нижнем углу экрана (у пола),
- * которая по клику разворачивается вверх с набором настраиваемых цветов и колорпикерами.
- */
 public class ThemeEditor implements IMinecraft {
 
     private static final String[] SLOTS = {
@@ -46,7 +42,6 @@ public class ThemeEditor implements IMinecraft {
     private static final float BTN_H = 14f;
     private static final float BTN_GAP = 4f;
 
-    // Синие акценты с непрозрачными чёрными фонами Interface и ClickGui.
     private static final int[] DEFAULTS = {
             0xFF3C6EF5,
             0xFF3C6EF5,
@@ -69,10 +64,13 @@ public class ThemeEditor implements IMinecraft {
     private final Animation expandAnim = new Animation(Easing.QUINTIC_OUT, 380);
     private final Animation pickerAnim = new Animation(Easing.QUINTIC_OUT, 240);
     // Анимация появления окна при открытии ClickGui (выезжает снизу)
-    private final Animation appearAnim = new Animation(Easing.QUINTIC_OUT, 340);
+    private final Animation appearAnim = new Animation(Easing.BACK_OUT, 400);
+    // Анимация масштаба при появлении
+    private final Animation scaleAnim = new Animation(Easing.QUINTIC_OUT, 350);
 
     public void resetAppear() {
         appearAnim.reset(0f);
+        scaleAnim.reset(0.8f);
     }
 
     private boolean expanded;
@@ -107,8 +105,6 @@ public class ThemeEditor implements IMinecraft {
         t.colorClickGui = colors[5];
     }
 
-    // ============================ Рендер ============================
-
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
         int sw = mc.getWindow().getScaledWidth();
         int sh = mc.getWindow().getScaledHeight();
@@ -121,29 +117,49 @@ public class ThemeEditor implements IMinecraft {
         x = sw - W - 4f;
         y = sh - height - 4f;
 
-        // Появление окна: выезд снизу при открытии ClickGui.
-        // Смещаем реальную координату y (шейпы рисуются через DEFAULT_MATRIX, а не матрицу
-        // контекста, поэтому translate матрицы контекста здесь не даёт эффекта).
+        // Появление окна
         appearAnim.run(true);
+        scaleAnim.run(1f);
+
         float appear = (float) appearAnim.getValue();
-        float appearShift = (1f - appear) * (height + 14f);
+        float scale = (float) scaleAnim.getValue();
+        float appearShift = (1f - appear) * (height + 20f);
         y += appearShift;
 
-        Vector4f topRound = new Vector4f(8f, 8f, 0f, 0f);
-        DrawUtil.drawRoundBlur(x, y, W, height, topRound, ColorProvider.rgba(200, 200, 200, 255), 14f);
-        DrawUtil.drawRound(x - 0.5f, y - 0.5f, W + 1f, height + 1f, new Vector4f(8.5f, 8.5f, 0f, 0f), ColorProvider.rgba(48, 66, 122, 70));
-        DrawUtil.drawRound(x, y, W, height, topRound, ColorProvider.setAlpha(ColorProvider.getColorClickGui(), 130));
+        if (appear < 0.01f) return;
 
-        // Вкладка — "Theme" + стрелка, отцентрированные по горизонтали и вертикали
-        DrawUtil.drawRound(x, y, W, TAB, topRound, ColorProvider.setAlpha(ColorProvider.getColorHeaderBg(), 110));
+        // Масштабирование при появлении
+        float centerX = x + W / 2f;
+        float centerY = y + height / 2f;
+
+        if (scale < 0.99f) {
+            context.getMatrices().push();
+            context.getMatrices().translate(centerX, centerY, 0);
+            context.getMatrices().scale(scale, scale, 1f);
+            context.getMatrices().translate(-centerX, -centerY, 0);
+        }
+
+        Vector4f topRound = new Vector4f(8f, 8f, 0f, 0f);
+        DrawUtil.drawRoundBlur(x, y, W, height, topRound, 
+            ColorProvider.rgba(200, 200, 200, (int)(255 * appear)), 14f);
+        DrawUtil.drawRound(x - 0.5f, y - 0.5f, W + 1f, height + 1f, 
+            new Vector4f(8.5f, 8.5f, 0f, 0f), ColorProvider.rgba(48, 66, 122, (int)(70 * appear)));
+        DrawUtil.drawRound(x, y, W, height, topRound, 
+            ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int)(130 * appear)));
+
+        // Вкладка
+        DrawUtil.drawRound(x, y, W, TAB, topRound, 
+            ColorProvider.setAlpha(ColorProvider.getColorHeaderBg(), (int)(110 * appear)));
         float titleSize = 8.5f;
         float titleW = Fonts.SFREGULAR.get().getWidth("Theme", titleSize);
         float arrowW = 7f;
         float groupGap = 5f;
         float groupTotal = titleW + groupGap + arrowW;
         float groupX = x + (W - groupTotal) / 2f;
-        DrawUtil.drawText(Fonts.SFREGULAR.get(), "Theme", groupX, y + (TAB - titleSize) / 2f, ColorProvider.rgba(255, 255, 255, 255), titleSize);
-        drawArrow(groupX + titleW + groupGap + arrowW / 2f, y + TAB / 2f, !expanded, ColorProvider.setAlpha(ColorProvider.getColorIcons(), 255));
+        DrawUtil.drawText(Fonts.SFREGULAR.get(), "Theme", groupX, y + (TAB - titleSize) / 2f, 
+            ColorProvider.rgba(255, 255, 255, (int)(255 * appear)), titleSize);
+        drawArrow(groupX + titleW + groupGap + arrowW / 2f, y + TAB / 2f, !expanded, 
+            ColorProvider.setAlpha(ColorProvider.getColorIcons(), (int)(255 * appear)));
 
         boolean tabHover = HoverUtil.isHovered(mouseX, mouseY, x, y, W, TAB);
         if (tabHover) CursorManager.requestHand();
@@ -154,27 +170,30 @@ public class ThemeEditor implements IMinecraft {
 
             float rowY = y + TAB + PAD;
             for (int i = 0; i < SLOTS.length; i++) {
-                renderRow(i, x + 4f, rowY, W - 8f, mouseX, mouseY, ep);
+                renderRow(i, x + 4f, rowY, W - 8f, mouseX, mouseY, ep * appear);
                 rowY += ROW_H;
             }
 
-            // Кнопка «Сбросить» — возврат к дефолтным цветам.
             float btnX = x + 4f;
             float btnY = rowY + BTN_GAP;
             float btnW = W - 8f;
             boolean btnHover = HoverUtil.isHovered(mouseX, mouseY, btnX, btnY, btnW, BTN_H);
             if (btnHover && ep > 0.9f) CursorManager.requestHand();
             int btnBg = btnHover
-                    ? ColorProvider.rgba(60, 78, 140, (int) (110 * ep))
-                    : ColorProvider.rgba(48, 66, 122, (int) (70 * ep));
+                    ? ColorProvider.rgba(60, 78, 140, (int) (110 * ep * appear))
+                    : ColorProvider.rgba(48, 66, 122, (int) (70 * ep * appear));
             DrawUtil.drawRound(btnX, btnY, btnW, BTN_H, 3f, btnBg);
             String label = "Сбросить";
             float lw = Fonts.SFREGULAR.get().getWidth(label, 7f);
             DrawUtil.drawText(Fonts.SFREGULAR.get(), label, btnX + (btnW - lw) / 2f, btnY + (BTN_H - 7f) / 2f,
-                    ColorProvider.rgba(230, 234, 245, (int) (255 * ep)), 7f);
+                    ColorProvider.rgba(230, 234, 245, (int) (255 * ep * appear)), 7f);
 
             Scissor.unset();
             Scissor.pop();
+        }
+
+        if (scale < 0.99f) {
+            context.getMatrices().pop();
         }
 
         // Драг колорпикера
@@ -189,7 +208,7 @@ public class ThemeEditor implements IMinecraft {
 
         pickerAnim.run(editingSlot >= 0 && expanded);
         if (pickerAnim.getValue() > 0.01f) {
-            renderPicker(mouseX, mouseY, (float) pickerAnim.getValue());
+            renderPicker(mouseX, mouseY, (float) pickerAnim.getValue() * appear);
         }
     }
 
@@ -199,7 +218,8 @@ public class ThemeEditor implements IMinecraft {
         if ((hov || active) && ep > 0.9f) CursorManager.requestHand();
 
         if (hov || active) {
-            DrawUtil.drawRound(rx, ry, rw, ROW_H - 1.5f, 3f, ColorProvider.rgba(60, 78, 140, (int) (55 * ep)));
+            DrawUtil.drawRound(rx, ry, rw, ROW_H - 1.5f, 3f, 
+                ColorProvider.rgba(60, 78, 140, (int) (55 * ep)));
         }
 
         int textColor = active ? ColorProvider.getColorText() : ColorProvider.rgba(210, 214, 230, 255);
@@ -209,7 +229,8 @@ public class ThemeEditor implements IMinecraft {
         float sw = 11f;
         float sx = rx + rw - sw - 3f;
         float sy = ry + (ROW_H - sw) / 2f - 0.75f;
-        DrawUtil.drawRound(sx - 0.75f, sy - 0.75f, sw + 1.5f, sw + 1.5f, 3f, ColorProvider.rgba(255, 255, 255, (int) (60 * ep)));
+        DrawUtil.drawRound(sx - 0.75f, sy - 0.75f, sw + 1.5f, sw + 1.5f, 3f, 
+            ColorProvider.rgba(255, 255, 255, (int) (60 * ep)));
         DrawUtil.drawRound(sx, sy, sw, sw, 2.5f, ColorProvider.setAlpha(colors[slot], (int) (255 * ep)));
     }
 
@@ -222,7 +243,6 @@ public class ThemeEditor implements IMinecraft {
         DrawUtil.drawRound(px - PICKER_PAD, py - PICKER_PAD, PICKER_W + PICKER_PAD * 2f, SV_SIZE + PICKER_PAD * 2f, 5f,
                 ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int) (140 * anim)));
 
-        // SV-квадрат
         int cHue = ColorProvider.setAlpha(Color.HSBtoRGB(hsv[0], 1f, 1f), a);
         int white = ColorProvider.rgba(255, 255, 255, a);
         int clearWhite = ColorProvider.rgba(255, 255, 255, 0);
@@ -237,17 +257,17 @@ public class ThemeEditor implements IMinecraft {
         DrawUtil.drawRound(scx - 2.5f, scy - 2.5f, 5f, 5f, 2.5f, ColorProvider.rgba(0, 0, 0, (int) (180 * anim)));
         DrawUtil.drawRound(scx - 1.75f, scy - 1.75f, 3.5f, 3.5f, 1.75f, white);
 
-        // Hue-полоса
         float hueX = px + SV_SIZE + HUE_GAP;
         for (float i = 0; i <= SV_SIZE; i += 0.5f) {
-            DrawUtil.drawRound(hueX, py + i, HUE_W, 1f, 0f, ColorProvider.setAlpha(Color.HSBtoRGB(i / SV_SIZE, 1f, 1f), a));
+            DrawUtil.drawRound(hueX, py + i, HUE_W, 1f, 0f, 
+                ColorProvider.setAlpha(Color.HSBtoRGB(i / SV_SIZE, 1f, 1f), a));
         }
         float hcy = py + hsv[0] * SV_SIZE;
-        DrawUtil.drawRound(hueX - 1.5f, hcy - 2f, HUE_W + 3f, 4f, 2f, ColorProvider.rgba(0, 0, 0, (int) (180 * anim)));
+        DrawUtil.drawRound(hueX - 1.5f, hcy - 2f, HUE_W + 3f, 4f, 2f, 
+            ColorProvider.rgba(0, 0, 0, (int) (180 * anim)));
         DrawUtil.drawRound(hueX - 0.5f, hcy - 1f, HUE_W + 1f, 2f, 1f, white);
     }
 
-    // Треугольная стрелка (вверх/вниз) без зависимости от глифов шрифта
     private void drawArrow(float cx, float cy, boolean up, int color) {
         float w = 7f, h = 4f;
         int rows = 8;
@@ -260,10 +280,7 @@ public class ThemeEditor implements IMinecraft {
         }
     }
 
-    // ============================ Ввод ============================
-
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Клик по вкладке — свернуть/развернуть
         if (HoverUtil.isHovered(mouseX, mouseY, x, y, W, TAB) && button == 0) {
             expanded = !expanded;
             if (!expanded) editingSlot = -1;
@@ -274,7 +291,6 @@ public class ThemeEditor implements IMinecraft {
             return HoverUtil.isHovered(mouseX, mouseY, x, y, W, height);
         }
 
-        // Взаимодействие с колорпикером
         if (editingSlot >= 0 && pickerAnim.getValue() > 0.5f) {
             if (HoverUtil.isHovered(mouseX, mouseY, pickerX, pickerY, SV_SIZE, SV_SIZE) && button == 0) {
                 draggingSV = true;
@@ -294,14 +310,12 @@ public class ThemeEditor implements IMinecraft {
             if (insidePicker) return true;
         }
 
-        // Клик по кнопке «Сбросить»
         float btnY = y + TAB + PAD + SLOTS.length * ROW_H + BTN_GAP;
         if (HoverUtil.isHovered(mouseX, mouseY, x + 4f, btnY, W - 8f, BTN_H) && button == 0) {
             resetToDefault();
             return true;
         }
 
-        // Клик по строкам
         float rowY = y + TAB + PAD;
         for (int i = 0; i < SLOTS.length; i++) {
             if (HoverUtil.isHovered(mouseX, mouseY, x + 4f, rowY, W - 8f, ROW_H) && button == 0) {
@@ -334,8 +348,6 @@ public class ThemeEditor implements IMinecraft {
         save();
     }
 
-    // Применяет сохранённую тему (или дефолтные цвета) сразу при запуске клиента,
-    // чтобы до открытия ClickGui не отображалась старая тема.
     public static void applyStartupTheme() {
         int[] c = DEFAULTS.clone();
         if (FILE.exists()) {
@@ -373,8 +385,6 @@ public class ThemeEditor implements IMinecraft {
     private static float clamp01(double v) {
         return (float) Math.max(0.0, Math.min(1.0, v));
     }
-
-    // ============================ Сохранение ============================
 
     public void save() {
         try {
