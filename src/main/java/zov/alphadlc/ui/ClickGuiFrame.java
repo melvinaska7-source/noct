@@ -41,7 +41,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     private boolean closing = false;
 
     // === АНИМАЦИЯ ОТКРЫТИЯ ВСЕГО GUI ===
-    // Глобальная анимация появления (0 → 1)
     private final Animation globalOpenAnim = new Animation(Easing.BACK_OUT, 450);
     private boolean firstRender = true;
 
@@ -79,9 +78,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
             panel.slideAnim.reset(0f);
-            // Все панели вылетают снизу (можно менять направление)
-            panel.slideDir = 1; // +1 = снизу, -1 = сверху
-            // Или поочерёдно: panel.slideDir = (i % 2 == 0) ? 1 : -1;
+            panel.slideDir = 1; // +1 = снизу
         }
         themeEditor.resetAppear();
         searchField.resetAppear();
@@ -105,7 +102,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         int windowHeight = mc.getWindow().getScaledHeight();
 
         // === ГЛОБАЛЬНАЯ АНИМАЦИЯ ОТКРЫТИЯ ===
-        // При первом рендере запускаем анимацию
         if (firstRender) {
             globalOpenAnim.run(1f);
             firstRender = false;
@@ -115,7 +111,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
         float globalProgress = (float) globalOpenAnim.getValue();
 
-        // Если закрываем и анимация завершена — закрываем экран
         if (closing && globalProgress < 0.02f) {
             closing = false;
             close();
@@ -147,14 +142,13 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         float panelY = (windowHeight - panelHeight) / 2f;
 
         // === АНИМАЦИЯ ВЫЛЕТА ПАНЕЛЕЙ ===
-        // Дистанция вылета — настраивай тут:
-        float offscreen = windowHeight / 2f + panelHeight;  // ← чем больше, тем дальше вылет
+        float offscreen = windowHeight / 2f + panelHeight;
 
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
 
             // Задержка для каждой панели (stagger)
-            float panelDelay = i * 0.04f;  // ← 40ms между панелями
+            float panelDelay = i * 0.04f;
             float panelProgress;
 
             if (!closing) {
@@ -164,13 +158,14 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
                 panelProgress = MathHelper.clamp((globalProgress - reverseDelay) / 0.7f, 0f, 1f);
             }
 
-            panelProgress = (float) Easing.QUINTIC_OUT.ease(panelProgress);
+            // Применяем easing через Animation (которая сама использует Easing)
+            // Создаём временную анимацию для easing-вычисления
             panel.slideAnim.setValue(panelProgress);
 
             float slide = MathHelper.clamp(panel.slideAnim.getValue(), 0f, 1f);
             float yOffset = (1f - slide) * panel.slideDir * offscreen;
 
-            // Дополнительный эффект: панели немного "подпрыгивают" при появлении
+            // Эффект подпрыгивания
             float bounce = 0f;
             if (!closing && slide > 0.01f && slide < 0.99f) {
                 bounce = (float) Math.sin(slide * Math.PI) * 3f * (1f - slide);
@@ -260,8 +255,10 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (itemModelGallery != null) {
-            if (itemModelGallery.mouseClicked(mouseX, mouseY, button)) return true;
-            itemModelGallery = null;
+            itemModelGallery.mouseClicked(mouseX, mouseY, button);
+            if (!itemModelGallery.contains(mouseX, mouseY)) {
+                itemModelGallery = null;
+            }
             return true;
         }
         for (Panel panel : panels) {
@@ -319,7 +316,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     public void close() {
         closing = true;
         globalOpenAnim.run(0f);
-        // Не закрываем сразу — ждём анимацию
     }
 
     public void forceClose() {
@@ -327,7 +323,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     public void openItemModelGallery(ItemModelSetting setting) {
-        itemModelGallery = new ItemModelGalleryPopup(setting, this);
+        itemModelGallery = new ItemModelGalleryPopup(setting);
     }
 
     public boolean searchCheck(String moduleName) {
@@ -341,6 +337,14 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     private float guiScale() {
-        return ClickGui.getInstance().scale.getValue().floatValue();
+        // Получаем scale из модуля ClickGui
+        // ClickGui — это Module, у него есть поле size (SliderSetting)
+        // Нужно получить экземпляр модуля
+        for (var module : zov.alphadlc.AlphaDLC.getInstance().getModuleStorage().getModules()) {
+            if (module instanceof ClickGui clickGui) {
+                return clickGui.size.getValue().floatValue();
+            }
+        }
+        return 1.0f;
     }
 }

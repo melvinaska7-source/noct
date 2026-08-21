@@ -63,9 +63,7 @@ public class ThemeEditor implements IMinecraft {
 
     private final Animation expandAnim = new Animation(Easing.QUINTIC_OUT, 380);
     private final Animation pickerAnim = new Animation(Easing.QUINTIC_OUT, 240);
-    // Анимация появления окна при открытии ClickGui (выезжает снизу)
     private final Animation appearAnim = new Animation(Easing.BACK_OUT, 400);
-    // Анимация масштаба при появлении
     private final Animation scaleAnim = new Animation(Easing.QUINTIC_OUT, 350);
 
     public void resetAppear() {
@@ -117,7 +115,6 @@ public class ThemeEditor implements IMinecraft {
         x = sw - W - 4f;
         y = sh - height - 4f;
 
-        // Появление окна
         appearAnim.run(true);
         scaleAnim.run(1f);
 
@@ -128,7 +125,6 @@ public class ThemeEditor implements IMinecraft {
 
         if (appear < 0.01f) return;
 
-        // Масштабирование при появлении
         float centerX = x + W / 2f;
         float centerY = y + height / 2f;
 
@@ -147,7 +143,6 @@ public class ThemeEditor implements IMinecraft {
         DrawUtil.drawRound(x, y, W, height, topRound, 
             ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int)(130 * appear)));
 
-        // Вкладка
         DrawUtil.drawRound(x, y, W, TAB, topRound, 
             ColorProvider.setAlpha(ColorProvider.getColorHeaderBg(), (int)(110 * appear)));
         float titleSize = 8.5f;
@@ -196,7 +191,6 @@ public class ThemeEditor implements IMinecraft {
             context.getMatrices().pop();
         }
 
-        // Драг колорпикера
         if (draggingSV) {
             hsv[1] = clamp01((mouseX - pickerX) / SV_SIZE);
             hsv[2] = 1f - clamp01((mouseY - pickerY) / SV_SIZE);

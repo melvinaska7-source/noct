@@ -47,7 +47,7 @@ public class SearchField implements IMinecraft {
         focusAnim.run(focused);
 
         float appear = (float) appearAnim.getValue();
-        float appearShift = (1f - appear) * 20f;  // Выезд снизу на 20 пикселей
+        float appearShift = (1f - appear) * 20f;
         float renderY = y + appearShift;
 
         float alpha = appear;
@@ -58,7 +58,6 @@ public class SearchField implements IMinecraft {
         boolean hovered = HoverUtil.isHovered(mouseX, mouseY, x, renderY, width, height);
         if (hovered) CursorManager.requestIBeam();
 
-        // Фон
         int bgColor = ColorProvider.interpolateColor(
             ColorProvider.rgba(30, 40, 70, (int)(120 * alpha)),
             ColorProvider.rgba(40, 55, 95, (int)(160 * alpha)),
@@ -71,27 +70,22 @@ public class SearchField implements IMinecraft {
             ColorProvider.rgba(48, 66, 122, (int)(60 * alpha)));
         DrawUtil.drawRound(x, renderY, width, height, 4f, bgColor);
 
-        // Обводка при фокусе
         if (focusAnim.getValue() > 0.01f) {
             int accent = ColorProvider.getColorVisualModules();
             int borderColor = ColorProvider.setAlpha(accent, (int)(100 * focusAnim.getValue() * alpha));
             DrawUtil.drawRound(x - 0.5f, renderY - 0.5f, width + 1f, height + 1f, 4.5f, borderColor);
         }
 
-        // Текст
         float textSize = 7.5f;
         float textY = renderY + (height - textSize) / 2f + 0.5f;
 
         if (text.isEmpty() && !focused) {
-            // Placeholder
             DrawUtil.drawText(Fonts.SFREGULAR.get(), placeholder, x + 6f, textY, 
                 ColorProvider.rgba(120, 130, 160, (int)(180 * alpha)), textSize);
         } else {
-            // Введённый текст
             DrawUtil.drawText(Fonts.SFREGULAR.get(), text, x + 6f, textY, 
                 ColorProvider.setAlpha(ColorProvider.getColorText(), intAlpha), textSize);
 
-            // Мигающий курсор
             if (focused && alpha > 0.9f) {
                 long now = System.currentTimeMillis();
                 if (now - lastCursorToggle > 530) {
@@ -109,8 +103,7 @@ public class SearchField implements IMinecraft {
             }
         }
 
-        // Иконка поиска (справа)
-        String searchIcon = "S";  // Или твоя иконка
+        String searchIcon = "S";
         float iconSize = 7f;
         float iconWidth = Fonts.SFREGULAR.get().getWidth(searchIcon, iconSize);
         DrawUtil.drawText(Fonts.SFREGULAR.get(), searchIcon, 
@@ -129,11 +122,11 @@ public class SearchField implements IMinecraft {
     public void keyPressed(int keyCode, int scanCode, int modifiers) {
         if (!focused) return;
 
-        if (keyCode == 259) { // Backspace
+        if (keyCode == 259) {
             if (!text.isEmpty()) {
                 text = text.substring(0, text.length() - 1);
             }
-        } else if (keyCode == 257 || keyCode == 335) { // Enter
+        } else if (keyCode == 257 || keyCode == 335) {
             focused = false;
         }
     }

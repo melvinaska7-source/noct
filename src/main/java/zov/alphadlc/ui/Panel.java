@@ -27,23 +27,16 @@ public class Panel implements IMinecraft {
     public float x, y, width, height;
     public final ModuleCategory category;
     public List<ModuleComponent> moduleComponents = new ArrayList<>();
-
-    // Анимация скролла
     private Animation animation = new Animation(Easing.QUINTIC_OUT, 350);
-    // Анимация прозрачности (привязана к slideAnim из ClickGuiFrame)
     private Animation animationAlpha = new Animation(Easing.BOUNCE_OUT, 350);
     private final Animation scrollbarAnim = new Animation(Easing.CUBIC_IN_OUT, 220);
-
-    // Анимация вылета панели (управляется из ClickGuiFrame)
     public final Animation slideAnim = new Animation(Easing.QUINTIC_OUT, 320);
-    public int slideDir = 1; // +1 — снизу, -1 — сверху
-
+    public int slideDir = 1;
     float scroll;
     float maxScroll;
 
     private final ClickGuiFrame parent;
 
-    // Кэш заголовка
     private String cachedTitle;
     private String cachedIcon;
     private float cachedTitleWidth = -1f;
@@ -67,19 +60,17 @@ public class Panel implements IMinecraft {
     }
 
     public void render(DrawContext context, int mouseX, int mouseY, float partialTicks) {
-        // Прозрачность панели
         float alphaRatio = MathHelper.clamp(slideAnim.getValue(), 0f, 1f);
         animationAlpha.setValue(alphaRatio);
         float alpha = Math.min(255 * alphaRatio, 255);
 
-        if (alpha < 1f) return;  // Полностью прозрачная — не рендерим
+        if (alpha < 1f) return;
 
         float cornerRadius = 8f;
         float headerHeight = 25f;
 
         int panelColor = ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int)(130 * alphaRatio));
 
-        // Фон панели
         DrawUtil.drawRoundBlur(x, y, width, height, cornerRadius, 
             ColorProvider.rgba(200, 200, 200, (int)(255 * alphaRatio)), 14f);
         DrawUtil.drawRound(x - 1f, y - 1f, width + 2f, height + 2f, cornerRadius + 0.5f, 
@@ -90,7 +81,6 @@ public class Panel implements IMinecraft {
             new org.joml.Vector4f(cornerRadius, 0, 0, cornerRadius), 
             ColorProvider.setAlpha(ColorProvider.getColorHeaderBg(), (int)(45 * alphaRatio)));
 
-        // Заголовок
         float iconSize = 8.5f;
         if (cachedTitleWidth < 0f) {
             String title = category.name();
@@ -120,7 +110,6 @@ public class Panel implements IMinecraft {
         DrawUtil.drawText(Fonts.SFREGULAR.get(), capitalizedTitle, startX + iconWidth + 3f, titleY, 
             ColorProvider.setAlpha(ColorProvider.getColorHeaderText(), (int) alpha), 8.5f);
 
-        // Скролл
         float offset = 2f;
         clampScroll();
         animation.run(scroll);

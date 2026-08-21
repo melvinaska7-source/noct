@@ -23,13 +23,9 @@ public class ModuleComponent extends Component {
     private final Panel panel;
 
     // === АНИМАЦИИ ===
-    // Раскрытие/закрытие настроек (высота карточки)
     private final Animation animation = new Animation(Easing.QUINTIC_OUT, 320);
-    // Hover эффект
     private final Animation hoverAnim = new Animation(Easing.QUINTIC_OUT, 300);
-    // Переключатель вкл/выкл
     private final Animation enabledAnim = new Animation(Easing.QUINTIC_OUT, 400);
-    // Плавная высота (для плавного изменения размера)
     private final Animation heightAnim = new Animation(Easing.QUINTIC_OUT, 350);
 
     public boolean open;
@@ -92,13 +88,13 @@ public class ModuleComponent extends Component {
         float targetExtraHeight = 0f;
 
         if (open || animation.getValue() > 0.01f) {
-            targetExtraHeight = 3f; // отступ между строкой модуля и первой настройкой
+            targetExtraHeight = 3f;
             for (Component comp : components) {
                 if (comp.isVisible()) {
                     targetExtraHeight += comp.getHeight();
                 }
             }
-            targetExtraHeight += 5f; // нижний запас
+            targetExtraHeight += 5f;
         }
 
         // Плавный переход высоты через анимацию
@@ -137,7 +133,6 @@ public class ModuleComponent extends Component {
                 }
                 float iconWidth = cachedSettingsIconWidth;
 
-                // Иконка {/} меняет цвет при открытии
                 int iconAlpha = (int)(180 + 75 * animation.getValue());
                 int iconColor = ColorProvider.setAlpha(ColorProvider.getColorInactiveText(), 
                     (int)(iconAlpha * alpha));
@@ -187,28 +182,24 @@ public class ModuleComponent extends Component {
                     ColorProvider.rgba(0, 0, 0, (int)(30 * alpha * animation.getValue())));
             }
 
-            // Stagger-анимация: каждая настройка появляется с задержкой
+            // Stagger-анимация
             float openProgress = (float) animation.getValue();
-            int visibleCount = 0;
 
             for (int i = 0; i < components.size(); i++) {
                 Component comp = components.get(i);
 
-                // Задержка для каждой настройки (60ms между ними)
                 float staggerDelay = i * 0.06f;
                 float staggerProgress;
 
                 if (open) {
-                    // При открытии: появляемся по очереди
                     staggerProgress = MathHelper.clamp((openProgress - staggerDelay) / 0.4f, 0f, 1f);
                 } else {
-                    // При закрытии: исчезаем в обратном порядке
                     float reverseDelay = (components.size() - 1 - i) * 0.04f;
                     staggerProgress = MathHelper.clamp((openProgress - reverseDelay) / 0.3f, 0f, 1f);
                 }
 
-                // Применяем easing к stagger
-                staggerProgress = (float) Easing.QUINTIC_OUT.ease(staggerProgress);
+                // Плавное easing через Math.pow (кубическое)
+                staggerProgress = (float) (1 - Math.pow(1 - staggerProgress, 3));
 
                 comp.getAlphaAnim().setValue(Math.min(panel.getAnimationAlpha().getValue(), 1) * staggerProgress);
                 comp.getAlphaAnimSetting().run(comp.isVisible());
@@ -242,7 +233,6 @@ public class ModuleComponent extends Component {
                     zov.alphadlc.util.render.math.Scissor.pop();
 
                     compY += comp.getHeight() * visibleProgress;
-                    visibleCount++;
                 }
             }
         }
