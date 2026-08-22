@@ -22,10 +22,10 @@ public class ModuleComponent extends Component {
     private final Module module;
     private final Panel panel;
 
-    // === АНИМАЦИИ ===
     private final Animation animation = new Animation(Easing.QUINTIC_OUT, 320);
     private final Animation hoverAnim = new Animation(Easing.QUINTIC_OUT, 300);
     private final Animation enabledAnim = new Animation(Easing.QUINTIC_OUT, 400);
+    // Плавная высота для раскрытия настроек
     private final Animation heightAnim = new Animation(Easing.QUINTIC_OUT, 350);
 
     public boolean open;
@@ -97,7 +97,7 @@ public class ModuleComponent extends Component {
             targetExtraHeight += 5f;
         }
 
-        // Плавный переход высоты через анимацию
+        // Плавный переход высоты
         heightAnim.run(targetExtraHeight);
         float extraHeight = (float) heightAnim.getValue() * (float) animation.getValue();
         float currentHeight = baseHeight + extraHeight;
@@ -133,6 +133,7 @@ public class ModuleComponent extends Component {
                 }
                 float iconWidth = cachedSettingsIconWidth;
 
+                // Иконка меняет прозрачность при открытии
                 int iconAlpha = (int)(180 + 75 * animation.getValue());
                 int iconColor = ColorProvider.setAlpha(ColorProvider.getColorInactiveText(), 
                     (int)(iconAlpha * alpha));

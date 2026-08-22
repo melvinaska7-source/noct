@@ -30,8 +30,6 @@ public class Panel implements IMinecraft {
     private Animation animation = new Animation(Easing.QUINTIC_OUT, 350);
     private Animation animationAlpha = new Animation(Easing.BOUNCE_OUT, 350);
     private final Animation scrollbarAnim = new Animation(Easing.CUBIC_IN_OUT, 220);
-    public final Animation slideAnim = new Animation(Easing.QUINTIC_OUT, 320);
-    public int slideDir = 1;
     float scroll;
     float maxScroll;
 
@@ -60,13 +58,8 @@ public class Panel implements IMinecraft {
     }
 
     public void render(DrawContext context, int mouseX, int mouseY, float partialTicks) {
-        float alphaRatio = MathHelper.clamp(slideAnim.getValue(), 0f, 1f);
-        animationAlpha.setValue(alphaRatio);
+        float alphaRatio = MathHelper.clamp(animationAlpha.getValue(), 0f, 1f);
         float alpha = Math.min(255 * alphaRatio, 255);
-
-        // УБРАНО: if (alpha < 1f) return;
-        // Теперь панели рисуются даже при alpha = 0 (но с прозрачностью 0)
-
         float cornerRadius = 8f;
         float headerHeight = 25f;
 
@@ -151,7 +144,6 @@ public class Panel implements IMinecraft {
         maxScroll = Math.max(0, offset - (height - headerHeight - 8));
         scrollbarAnim.run(maxScroll > 0f);
 
-        // Скроллбар
         if (scrollbarAnim.getValue() > 0.01f && maxScroll > 0) {
             float scrollbarWidth = 2.5f;
             float scrollbarHeight = (height - headerHeight - 8) * ((height - headerHeight - 8) / offset);
