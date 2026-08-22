@@ -14,6 +14,10 @@ public abstract class Component implements IComponent {
     private final Animation alphaAnimSetting = new Animation(Easing.CUBIC_OUT, 280);
     private final Animation alphaAnimBack = new Animation(Easing.CUBIC_OUT, 280);
 
+    // === НОВОЕ: Анимация сдвига по Y для эффекта "выпадания" настроек ===
+    // Каждый компонент плавно появляется сверху вниз (slideY 0→1)
+    private final Animation slideYAnim = new Animation(Easing.QUINTIC_OUT, 280);
+
     public boolean isVisible() {
         return true;
     }

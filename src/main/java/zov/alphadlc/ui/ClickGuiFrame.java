@@ -37,6 +37,14 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     private final Animation descAnim = new Animation(Easing.QUINTIC_OUT, 220);
     private String lastDesc = null;
 
+    // Анимация закрытия (панели улетают обратно, после чего экран закрывается)
+    private boolean closing = false;
+
+    // === НОВОЕ: Глобальная анимация открытия GUI из центра ===
+    // BACK_OUT даёт эффект "выстрела" — быстрый старт, небольшой перелёт за границу, возврат
+    private final Animation openScaleAnim = new Animation(Easing.BACK_OUT, 420);
+    private final Animation openAlphaAnim = new Animation(Easing.QUINTIC_OUT, 300);
+
     // Курсоры создаём один раз (лениво) и меняем только при смене состояния —
     // раньше glfwCreateStandardCursor() дёргался каждый кадр без освобождения (нативная утечка).
     private long handCursor, iBeamCursor, pointingCursor, arrowCursor;
@@ -61,6 +69,20 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         if (cursor == currentCursor) return;
         GLFW.glfwSetCursor(mc.getWindow().getHandle(), cursor);
         currentCursor = cursor;
+    }
+
+    // Сброс анимации появления — панели вылетают снизу/сверху к центру
+    public void playOpenAnimation() {
+        closing = false;
+        itemModelGallery = null;
+        // === НОВОЕ: Сброс глобальной анимации масштаба ===
+        openScaleAnim.reset(0f);
+        openAlphaAnim.reset(0f);
+        for (Panel panel : panels) {
+            panel.slideAnim.reset(0f);
+        }
+        themeEditor.resetAppear();
+        searchField.resetAppear();
     }
 
     public ClickGuiFrame() {
@@ -101,28 +123,73 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         modelView.scale(guiScale, guiScale, 1f);
         modelView.translate(-centerX, -centerY, 0f);
 
+        // === НОВОЕ: Глобальная анимация открытия/закрытия GUI ===
+        // При открытии: масштаб 0→1 с эффектом BACK_OUT (выстрел из центра)
+        // При закрытии: масштаб 1→0 с QUINTIC_OUT (плавное исчезновение)
+        openScaleAnim.run(closing ? 0f : 1f);
+        openAlphaAnim.run(closing ? 0f : 1f);
+        float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0f, 1f);
+        float openAlpha = MathHelper.clamp((float) openAlphaAnim.getValue(), 0f, 1f);
+
+        // Применяем масштаб из центра экрана
+        // BACK_OUT может дать значение > 1 (перелёт), что создаёт эффект "выстрела"
+        modelView.translate(centerX, centerY, 0f);
+        modelView.scale(openProgress, openProgress, 1f);
+        modelView.translate(-centerX, -centerY, 0f);
+
         float panelWidth = 120f;
         float spacing = 4f;
-        float panelHeight = 270f;  // Уменьшена высота с 280f до 270f
+        float panelHeight = 270f;
         float panelTotalWidth = panels.size() * (panelWidth + spacing) - spacing;
 
         float startX = (windowWidth - panelTotalWidth) / 2f;
-        float panelY = (windowHeight - panelHeight) / 2f;  // ровно по центру вертикально
+        float panelY = (windowHeight - panelHeight) / 2f;
 
+        float offscreen = windowHeight / 2f + panelHeight;
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
+            // Чётные вылетают снизу, нечётные — сверху
+            panel.slideDir = (i % 2 == 0) ? 1 : -1;
+            panel.slideAnim.run(closing ? 0f : 1f);
+            float slide = MathHelper.clamp(panel.slideAnim.getValue(), 0f, 1f);
+            // Умножаем slide на openAlpha для синхронизации с глобальной анимацией
+            float effectiveSlide = slide * openAlpha;
+            float yOffset = (1f - effectiveSlide) * panel.slideDir * offscreen;
+
             panel.setX(startX + i * (panelWidth + spacing));
-            panel.setY(panelY);
+            panel.setY(panelY + yOffset);
             panel.setWidth(panelWidth);
             panel.setHeight(panelHeight);
 
             panel.render(context, mouseX, mouseY, delta);
         }
 
+        // Когда анимация закрытия завершилась — закрываем экран
+        if (closing) {
+            boolean allClosed = true;
+            for (Panel panel : panels) {
+                if (panel.slideAnim.getValue() > 0.02f) {
+                    allClosed = false;
+                    break;
+                }
+            }
+            // Также ждём завершения глобальной анимации
+            if (openScaleAnim.getValue() > 0.02f) {
+                allClosed = false;
+            }
+            if (allClosed) {
+                closing = false;
+                modelView.popMatrix();
+                zov.alphadlc.util.render.math.Scissor.resetGuiTransform();
+                close();
+                return;
+            }
+        }
+
         float searchW = 90;
         float searchH = 18;
         float searchX = windowWidth / 2f - searchW / 2f;
-        float searchY = panelY + panelHeight + 35;  // увеличено с 25 (поиск ниже)
+        float searchY = panelY + panelHeight + 35;
 
         searchField.setBounds(searchX, searchY, searchW, searchH);
         searchField.render(context, mouseX, mouseY, delta);
@@ -149,7 +216,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
             float textWidth = Fonts.SFREGULAR.get().getWidth(lastDesc, size);
             float tooltipW = textWidth + padX * 2f;
             float tooltipH = size + padY * 2f;
-            // Держим окно в пределах экрана, чтобы текст не выходил за рамки
             float tooltipX = MathHelper.clamp(windowWidth / 2f - tooltipW / 2f, 4f, windowWidth - tooltipW - 4f);
             float tooltipY = panelY - tooltipH - 8f;
 
@@ -164,7 +230,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
             context.getMatrices().translate(-cx, -cy, 0);
 
             DrawUtil.drawRoundBlur(tooltipX, tooltipY, tooltipW, tooltipH, 4f, ColorProvider.rgba(200, 200, 200, (int) (255 * da)), 12f);
-            // Полупрозрачный тёмно-синий фон поверх матового блюра
             DrawUtil.drawRound(tooltipX, tooltipY, tooltipW, tooltipH, 4f, ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int) (130 * da)));
             DrawUtil.drawRound(tooltipX - 0.5f, tooltipY - 0.5f, tooltipW + 1f, tooltipH + 1f, 4.5f, ColorProvider.rgba(48, 66, 122, (int) (90 * da)));
             DrawUtil.drawText(Fonts.SFREGULAR.get(), lastDesc, tooltipX + padX, tooltipY + (tooltipH - size) / 2f + 0.2f,
@@ -191,95 +256,45 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     @Override
-    public void removed() {
-        super.removed();
-        // Возвращаем системный курсор и освобождаем созданные нативные хэндлы.
-        if (cursorsCreated) {
-            GLFW.glfwSetCursor(mc.getWindow().getHandle(), 0L);
-            GLFW.glfwDestroyCursor(handCursor);
-            GLFW.glfwDestroyCursor(iBeamCursor);
-            GLFW.glfwDestroyCursor(pointingCursor);
-            GLFW.glfwDestroyCursor(arrowCursor);
-            cursorsCreated = false;
-            currentCursor = 0L;
-        }
-    }
-
-    public boolean searchCheck(String text) {
-        if (searchField.isEmpty()) return false;
-        String raw = searchField.text;
-        // Нормализуем строку поиска только когда она изменилась, а не для каждого модуля каждый кадр.
-        if (!raw.equals(cachedRawQuery)) {
-            cachedRawQuery = raw;
-            cachedNormalizedQuery = raw.replaceAll(" ", "").toLowerCase();
-        }
-        return !text.replaceAll(" ", "").toLowerCase().contains(cachedNormalizedQuery);
-    }
-
-    public void openItemModelGallery(ItemModelSetting setting) {
-        itemModelGallery = new ItemModelGalleryPopup(setting);
-    }
-
-    private float guiScale() {
-        ClickGui module = zov.alphadlc.util.base.Instance.get(ClickGui.class);
-        return module != null ? (float) module.size.getValue() : 1f;
-    }
-
-    // Перевод экранных координат мыши в масштабированное пространство GUI
-    private double scaleMouseX(double mouseX) {
-        float s = guiScale();
-        double cx = mc.getWindow().getScaledWidth() / 2.0;
-        return (mouseX - cx) / s + cx;
-    }
-
-    private double scaleMouseY(double mouseY) {
-        float s = guiScale();
-        double cy = mc.getWindow().getScaledHeight() / 2.0;
-        return (mouseY - cy) / s + cy;
-    }
-
-    @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        mouseX = scaleMouseX(mouseX);
-        mouseY = scaleMouseY(mouseY);
         if (itemModelGallery != null) {
-            if (!itemModelGallery.contains(mouseX, mouseY)) {
-                itemModelGallery = null;
-            } else {
-                itemModelGallery.mouseClicked(mouseX, mouseY, button);
-            }
+            if (itemModelGallery.mouseClicked(mouseX, mouseY, button)) return true;
+            itemModelGallery = null;
             return true;
         }
-        // Менеджер тем имеет приоритет (он поверх остального UI)
-        if (themeEditor.mouseClicked(mouseX, mouseY, button)) {
-            return true;
-        }
+        if (themeEditor.mouseClicked(mouseX, mouseY, button)) return true;
+
+        int windowWidth = mc.getWindow().getScaledWidth();
+        int windowHeight = mc.getWindow().getScaledHeight();
+        float guiScale = guiScale();
+        float centerX = windowWidth / 2f;
+        float centerY = windowHeight / 2f;
+        float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0.01f, 1f);
+        int mouseGx = (int) ((mouseX - centerX) / (guiScale * openProgress) + centerX);
+        int mouseGy = (int) ((mouseY - centerY) / (guiScale * openProgress) + centerY);
+        mouseX = mouseGx;
+        mouseY = mouseGy;
 
         searchField.mouseClicked(mouseX, mouseY, button);
-
-        if (searchField.isEmpty()) {
-            for (Panel panel : panels) {
-                if (HoverUtil.isHovered(mouseX, mouseY, panel.getX(), panel.getY(), panel.getWidth(), panel.getHeight())) {
-                    panel.mouseClicked(mouseX, mouseY, button);
-                }
-            }
-        } else {
-            for (Panel panel : panels) {
-                panel.mouseClicked(mouseX, mouseY, button);
-            }
+        for (Panel panel : panels) {
+            panel.mouseClicked(mouseX, mouseY, button);
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        mouseX = scaleMouseX(mouseX);
-        mouseY = scaleMouseY(mouseY);
-        if (itemModelGallery != null) {
-            itemModelGallery.mouseReleased(mouseX, mouseY, button);
-            return true;
-        }
-        themeEditor.mouseReleased(mouseX, mouseY, button);
+        int windowWidth = mc.getWindow().getScaledWidth();
+        int windowHeight = mc.getWindow().getScaledHeight();
+        float guiScale = guiScale();
+        float centerX = windowWidth / 2f;
+        float centerY = windowHeight / 2f;
+        float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0.01f, 1f);
+        int mouseGx = (int) ((mouseX - centerX) / (guiScale * openProgress) + centerX);
+        int mouseGy = (int) ((mouseY - centerY) / (guiScale * openProgress) + centerY);
+        mouseX = mouseGx;
+        mouseY = mouseGy;
+
         for (Panel panel : panels) {
             panel.mouseReleased(mouseX, mouseY, button);
         }
@@ -288,12 +303,17 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        mouseX = scaleMouseX(mouseX);
-        mouseY = scaleMouseY(mouseY);
-        if (itemModelGallery != null) {
-            itemModelGallery.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
-            return true;
-        }
+        int windowWidth = mc.getWindow().getScaledWidth();
+        int windowHeight = mc.getWindow().getScaledHeight();
+        float guiScale = guiScale();
+        float centerX = windowWidth / 2f;
+        float centerY = windowHeight / 2f;
+        float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0.01f, 1f);
+        int mouseGx = (int) ((mouseX - centerX) / (guiScale * openProgress) + centerX);
+        int mouseGy = (int) ((mouseY - centerY) / (guiScale * openProgress) + centerY);
+        mouseX = mouseGx;
+        mouseY = mouseGy;
+
         for (Panel panel : panels) {
             panel.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount);
         }
@@ -302,69 +322,61 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (itemModelGallery != null) {
-            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-                itemModelGallery = null;
-            } else {
-                itemModelGallery.keyPressed(keyCode, scanCode, modifiers);
-            }
-            return true;
-        }
-        // Проверяем, не биндится ли какой-то модуль в данный момент
-        boolean anyModuleBinding = false;
+        if (searchField.keyPressed(keyCode, scanCode, modifiers)) return true;
         for (Panel panel : panels) {
-            for (ModuleComponent component : panel.getModuleComponents()) {
-                if (component.isBinding()) {
-                    anyModuleBinding = true;
-                    break;
-                }
-            }
-            if (anyModuleBinding) break;
-        }
-
-        // Если модуль биндится и нажат ESC, не закрываем GUI
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE && anyModuleBinding) {
-            // Передаем нажатие панелям для обработки бинда
-            for (Panel panel : panels) {
-                panel.keyPressed(keyCode, scanCode, modifiers);
-            }
-            return true; // Останавливаем дальнейшую обработку ESC
-        }
-
-        // Пока поле поиска в фокусе — все нажатия уходят в него и не утекают в игру/модули.
-        // ESC при этом лишь снимает фокус, а не закрывает GUI.
-        if (searchField.isFocused()) {
-            searchField.keyPressed(keyCode, scanCode, modifiers);
-            return true;
-        }
-
-        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
-            ensureCursors();
-            applyCursor(arrowCursor);
-            super.close(); // ← СТАРЫЙ СПОСОБ ЗАКРЫТИЯ, работает!
-            return true;
-        }
-        for (Panel panel : panels) {
-            panel.keyPressed(keyCode, scanCode, modifiers);
+            if (panel.keyPressed(keyCode, scanCode, modifiers)) return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (itemModelGallery != null) {
-            itemModelGallery.charTyped(chr, modifiers);
-            return true;
-        }
-        if (searchField.isFocused()) {
-            searchField.charTyped(chr, modifiers);
-            return true;
-        }
+        if (searchField.charTyped(chr, modifiers)) return true;
         return super.charTyped(chr, modifiers);
     }
 
     @Override
     public boolean shouldPause() {
         return false;
+    }
+
+    @Override
+    public boolean shouldCloseOnEsc() {
+        return false;
+    }
+
+    @Override
+    public void close() {
+        if (closing) return;
+        closing = true;
+        // === НОВОЕ: Запускаем анимацию закрытия ===
+        openScaleAnim.animateTo(0f);
+        openAlphaAnim.animateTo(0f);
+        for (Panel panel : panels) {
+            panel.slideAnim.animateTo(0f);
+        }
+    }
+
+    public void openItemModelGallery(ItemModelSetting setting) {
+        itemModelGallery = new ItemModelGalleryPopup(setting, () -> itemModelGallery = null);
+    }
+
+    public boolean searchCheck(String moduleName) {
+        String raw = searchField.text;
+        if (raw.isEmpty()) {
+            cachedRawQuery = null;
+            cachedNormalizedQuery = "";
+            return false;
+        }
+        if (!raw.equals(cachedRawQuery)) {
+            cachedRawQuery = raw;
+            cachedNormalizedQuery = raw.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        }
+        String normalizedModule = moduleName.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+        return !normalizedModule.contains(cachedNormalizedQuery);
+    }
+
+    private float guiScale() {
+        return zov.alphadlc.module.list.render.ClickGui.getInstance().scale.getValue().floatValue();
     }
 }
