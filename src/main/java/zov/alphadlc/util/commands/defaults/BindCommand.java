@@ -11,6 +11,7 @@ import zov.alphadlc.util.commands.api.Command;
 import zov.alphadlc.util.commands.api.argument.IArgConsumer;
 import zov.alphadlc.util.commands.api.datatypes.KeyDataType;
 import zov.alphadlc.util.commands.api.exception.CommandException;
+import zov.alphadlc.util.commands.api.exception.CommandNotEnoughArgumentsException;
 import zov.alphadlc.util.commands.api.helpers.Paginator;
 import zov.alphadlc.util.commands.api.helpers.TabCompleteHelper;
 import zov.alphadlc.util.keyboard.KeyStorage;
@@ -50,25 +51,31 @@ public class BindCommand extends Command {
     }
 
     // === НОВОЕ: Собираем имя модуля из нескольких аргументов (поддержка пробелов) ===
-    private Module consumeModule(IArgConsumer args) {
+    // Используем peekString() для просмотра без съедания, getString() только после нахождения
+    private Module consumeModule(IArgConsumer args) throws CommandException {
         if (!args.hasAny()) return null;
         
-        List<String> remaining = args.getArgs().stream()
-            .map(arg -> arg.getValue().toString())
-            .collect(Collectors.toList());
+        int argCount = args.getArgs().size();
         
         // Перебираем от самого длинного к самому короткому
-        for (int i = remaining.size(); i >= 1; i--) {
+        for (int i = argCount; i >= 1; i--) {
             StringBuilder nameBuilder = new StringBuilder();
             for (int j = 0; j < i; j++) {
                 if (j > 0) nameBuilder.append(" ");
-                nameBuilder.append(remaining.get(j));
+                try {
+                    nameBuilder.append(args.peekString(j));
+                } catch (CommandNotEnoughArgumentsException e) {
+                    break;
+                }
             }
             String name = nameBuilder.toString();
             Module module = moduleStorage.get(name);
             if (module != null) {
+                // Съедаем использованные аргументы
                 for (int j = 0; j < i; j++) {
-                    args.getString();
+                    if (args.hasAny()) {
+                        args.getString();
+                    }
                 }
                 return module;
             }

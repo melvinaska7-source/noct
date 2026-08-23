@@ -15,6 +15,7 @@ import zov.alphadlc.util.commands.api.helpers.Paginator;
 import zov.alphadlc.util.commands.api.helpers.TabCompleteHelper;
 import zov.alphadlc.util.keyboard.KeyStorage;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -52,7 +53,6 @@ public class BindCommand extends Command {
     private Module consumeModule(IArgConsumer args) {
         if (!args.hasAny()) return null;
         
-        // Пробуем собрать имя из оставшихся аргументов
         List<String> remaining = args.getArgs().stream()
             .map(arg -> arg.getValue().toString())
             .collect(Collectors.toList());
@@ -67,7 +67,6 @@ public class BindCommand extends Command {
             String name = nameBuilder.toString();
             Module module = moduleStorage.get(name);
             if (module != null) {
-                // Съедаем использованные аргументы
                 for (int j = 0; j < i; j++) {
                     args.getString();
                 }
@@ -75,7 +74,6 @@ public class BindCommand extends Command {
             }
         }
         
-        // Если не нашли — возвращаем null
         return null;
     }
 
@@ -154,7 +152,6 @@ public class BindCommand extends Command {
         String action = args.peekString(0).toLowerCase(Locale.ROOT);
 
         if ((action.equals("add") || action.equals("remove")) && size >= 2) {
-            // Собираем всё после action как потенциальное имя модуля
             StringBuilder prefixBuilder = new StringBuilder();
             for (int i = 1; i < size; i++) {
                 if (i > 1) prefixBuilder.append(" ");
@@ -173,7 +170,6 @@ public class BindCommand extends Command {
         }
 
         if (action.equals("add") && size >= 3) {
-            // Проверяем, не является ли последний аргумент частью имени модуля
             StringBuilder nameBuilder = new StringBuilder();
             for (int i = 1; i < size - 1; i++) {
                 if (i > 1) nameBuilder.append(" ");
@@ -183,7 +179,6 @@ public class BindCommand extends Command {
             Module module = moduleStorage.get(potentialModule);
             
             if (module != null) {
-                // Модуль найден, последний аргумент — клавиша
                 String keyPrefix = args.peekString(size - 1);
                 return KeyStorage.keyMap.keySet().stream()
                         .filter(k -> k.toLowerCase(Locale.ROOT).startsWith(keyPrefix.toLowerCase(Locale.ROOT)))
@@ -193,5 +188,23 @@ public class BindCommand extends Command {
         }
 
         return Stream.empty();
+    }
+
+    @Override
+    public String getShortDesc() {
+        return "Управление привязкой модуля к клавише";
+    }
+
+    @Override
+    public List<String> getLongDesc() {
+        return Arrays.asList(
+            "Команда для установки и удаления привязки модуля к клавише",
+            "",
+            "Использование:",
+            "> bind add <модуль> <клавиша> — привязать модуль к клавише",
+            "> bind remove <модуль> — отвязать модуль от клавиши",
+            "> bind list — показать все привязанные модули",
+            "> bind clear — отвязать все модули от своих клавиш"
+        );
     }
 }
