@@ -56,7 +56,7 @@ public class ModuleStorage implements IMinecraft {
                 new ChestStealer(), new SeeInvisible(), new ShulkerView(),
                 new ServerJoiner(), new UseIndicator(), new ServerHelper(),
                 new Particles(), new Arrows(),
-                new TeleportExploit(), new AutoTrap(),
+                new TeleportExploit(), new AutoTrap(), new AppleFarm(),
                 new TargetPearl(), new LineGlyphs(), new HitIndicator(),
                 new GrimGlide(), new Timer(), new MaceTarget(), new NoEntityTrace(),
                 new LockSlot(), new ElytraTarget(), new HitBubbles()

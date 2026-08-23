@@ -15,10 +15,12 @@ import net.minecraft.entity.passive.PassiveEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.AxeItem;
+import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import zov.alphadlc.util.friend.FriendRepository;
 import zov.alphadlc.event.list.EventPlayerUpdate;
 import zov.alphadlc.event.list.EventTick;
 import zov.alphadlc.module.Module;
@@ -28,7 +30,7 @@ import zov.alphadlc.module.settings.BooleanSetting;
 import zov.alphadlc.module.settings.ModeSetting;
 import zov.alphadlc.module.settings.SliderSetting;
 import zov.alphadlc.ui.ClickGuiFrame;
-import zov.alphadlc.util.friend.FriendRepository;
+import zov.alphadlc.util.IMinecraft;
 import zov.alphadlc.util.math.MathUtil;
 import zov.alphadlc.util.player.combat.AuraUtil;
 import zov.alphadlc.util.player.combat.MaceUtil;
@@ -40,7 +42,6 @@ import zov.alphadlc.util.rotation.RotationComponent;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Optional;
-import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 /**
@@ -78,8 +79,8 @@ public class LegitAura extends Module {
     private int savedAxeSlot = -1;
     private boolean wasSprinting = false;
     private boolean randomDir = false;
-    private final float[] pitchHistory = new float[30];
-    private final float[] timers = new float[12];
+    private float[] pitchHistory = new float[30];
+    private float[] timers = new float[12];
 
     @Override
     public void onEnable() {
@@ -91,7 +92,7 @@ public class LegitAura extends Module {
         randomDir = false;
         Arrays.fill(pitchHistory, mc.player != null ? mc.player.getPitch() : 0.0f);
         Arrays.fill(timers, 0.0f);
-        timers[9] = MathUtil.random(9.0f, 13.0f);
+        timers[9] = MathUtil.a(9.0f, 13.0f);
     }
 
     @Override
@@ -99,7 +100,6 @@ public class LegitAura extends Module {
         target = null;
         restoreSlot();
     }
-
     @Subscribe
     public void onTick(EventTick event) {
         if (mc.player == null || mc.world == null) return;
@@ -117,12 +117,13 @@ public class LegitAura extends Module {
         restoreSlot();
 
         if (target != null) {
+            performAttack();
             rotateToTarget();
+            performAttack();
         } else {
             timers[8] = 1.0f;
         }
 
-        // Decrement timers
         timers[3] = Math.max(0, timers[3] - 1);
         timers[5] = Math.max(-1, timers[5] - 1);
         timers[8] = Math.max(0, timers[8] - 1);
@@ -146,7 +147,6 @@ public class LegitAura extends Module {
             timers[0]--;
         }
     }
-
     private Optional<LivingEntity> findTarget() {
         if (mc.world == null || mc.player == null) return Optional.empty();
 
@@ -156,11 +156,10 @@ public class LegitAura extends Module {
 
         Comparator<LivingEntity> comparator;
         switch (targetPriority.getValue()) {
-            case "Дистанция" -> comparator = Comparator.comparingDouble(e -> 
-                mc.player.squaredDistanceTo(e));
+            case "Дистанция" -> comparator = Comparator.comparingDouble(AuraUtil::distanceSqToEntity);
             case "ХП" -> comparator = Comparator.comparingDouble(LivingEntity::getHealth);
-            default -> comparator = Comparator.comparingDouble(e -> {
-                Vec3d toCenter = e.getBoundingBox().getCenter().subtract(eye).normalize();
+            default -> comparator = Comparator.comparingDouble(e3 -> {
+                Vec3d toCenter = e3.getBoundingBox().getCenter().subtract(eye).normalize();
                 Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
                 return Math.acos(MathHelper.clamp(look.dotProduct(toCenter), -1.0, 1.0));
             });
@@ -171,18 +170,18 @@ public class LegitAura extends Module {
             .map(LivingEntity.class::cast)
             .filter(e -> e != mc.player && e.isAlive())
             .filter(this::isValidTargetType)
-            .filter(e -> AuraUtil.isInReach(e, (float) reach))
+            .filter(e -> AuraUtil.isInReach(e, reach))
             .filter(e -> isInFov(e, fovVal))
-            .filter(e -> hitThroughWalls.getValue() || AuraUtil.isVisible(eye, e, (float) reach))
+            .filter(e -> hitThroughWalls.getValue() || AuraUtil.isVisible(eye, e, reach))
             .min(comparator);
     }
 
     private boolean isValidTarget(LivingEntity entity) {
         if (entity == null || !entity.isAlive()) return false;
         double reach = attackRange.getValue() + extraReach.getValue();
-        return AuraUtil.isInReach(entity, (float) reach)
+        return AuraUtil.isInReach(entity, reach)
             && isValidTargetType(entity)
-            && (hitThroughWalls.getValue() || AuraUtil.isVisible(mc.player.getEyePos(), entity, (float) reach));
+            && (hitThroughWalls.getValue() || AuraUtil.isVisible(mc.player.getEyePos(), entity, reach));
     }
 
     private boolean isValidTargetType(LivingEntity entity) {
@@ -215,7 +214,82 @@ public class LegitAura extends Module {
         double angle = Math.toDegrees(Math.acos(MathHelper.clamp(look.dotProduct(toEntity), -1.0, 1.0)));
         return angle <= maxFov / 2.0f;
     }
+    private void performAttack() {
+        if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
+            attackRange.getValue(), target, wallCheck.getValue())) {
+           InReach(target, attackRange.getValue())) {
+            event.setForward(0.0f);
+            event.setStrafe(0.0f);
+            timers[0]--;
+        }
+    }
+    private Optional<LivingEntity> findTarget() {
+        if (mc.world == null || mc.player == null) return Optional.empty();
 
+        double reach = attackRange.getValue() + extraReach.getValue();
+        float fovVal = fov.getValue();
+        Vec3d eye = mc.player.getEyePos();
+
+        Comparator<LivingEntity> comparator;
+        switch (targetPriority.getValue()) {
+            case "Дистанция" -> comparator = Comparator.comparingDouble(AuraUtil::distanceSqToEntity);
+            case "ХП" -> comparator = Comparator.comparingDouble(LivingEntity::getHealth);
+            default -> comparator = Comparator.comparingDouble(e3 -> {
+                Vec3d toCenter = e3.getBoundingBox().getCenter().subtract(eye).normalize();
+                Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+                return Math.acos(MathHelper.clamp(look.dotProduct(toCenter), -1.0, 1.0));
+            });
+        }
+
+        return StreamSupport.stream(mc.world.getEntities().spliterator(), false)
+            .filter(LivingEntity.class::isInstance)
+            .map(LivingEntity.class::cast)
+            .filter(e -> e != mc.player && e.isAlive())
+            .filter(this::isValidTargetType)
+            .filter(e -> AuraUtil.isInReach(e, reach))
+            .filter(e -> isInFov(e, fovVal))
+            .filter(e -> hitThroughWalls.getValue() || AuraUtil.isVisible(eye, e, reach))
+            .min(comparator);
+    }
+
+    private boolean isValidTarget(LivingEntity entity) {
+        if (entity == null || !entity.isAlive()) return false;
+        double reach = attackRange.getValue() + extraReach.getValue();
+        return AuraUtil.isInReach(entity, reach)
+            && isValidTargetType(entity)
+            && (hitThroughWalls.getValue() || AuraUtil.isVisible(mc.player.getEyePos(), entity, reach));
+    }
+
+    private boolean isValidTargetType(LivingEntity entity) {
+        String mode = targetMode.getValue();
+        if (mode.equals("Игроки") && !(entity instanceof PlayerEntity)) return false;
+        if (mode.equals("Мобы") && (entity instanceof PlayerEntity)) return false;
+
+        if (entity instanceof PlayerEntity player) {
+            if (FriendRepository.isFriend(player.getNameForScoreboard()))
+                return false;
+            boolean naked = Stream.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
+                .noneMatch(slot -> player.getEquippedStack(slot).getItem() instanceof ArmorItem);
+            return !naked;
+        }
+        return (entity instanceof HostileEntity)
+            || (entity instanceof SlimeEntity)
+            || (entity instanceof FlyingEntity)
+            || (entity instanceof EnderDragonEntity)
+            || (entity instanceof PassiveEntity)
+            || (entity instanceof GolemEntity)
+            || (entity instanceof AllayEntity)
+            || (entity instanceof AmbientEntity);
+    }
+
+    private boolean isInFov(Entity entity, float maxFov) {
+        if (maxFov >= 180.0f) return true;
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d toEntity = entity.getBoundingBox().getCenter().subtract(eye).normalize();
+        Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+        double angle = Math.toDegrees(Math.acos(MathHelper.clamp(look.dotProduct(toEntity), -1.0, 1.0)));
+        return angle <= maxFov / 2.0f;
+    }
     private void performAttack() {
         if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
             attackRange.getValue(), target, wallCheck.getValue())) {
@@ -292,11 +366,11 @@ public class LegitAura extends Module {
             mc.interactionManager.attackEntity(mc.player, target);
             mc.player.swingHand(Hand.MAIN_HAND);
             attackCooldown = 0;
-            timers[5] = MathUtil.random(8.0f, 10.0f);
-            timers[9] = MathUtil.random(9.0f, 13.0f);
+            timers[5] = MathUtil.a(8.0f, 10.0f);
+            timers[9] = MathUtil.a(9.0f, 13.0f);
 
             if (timers[2] == -1.0f) {
-                timers[4] = MathUtil.random(30.0f, 35.0f);
+                timers[4] = MathUtil.a(30.0f, 35.0f);
             }
             timers[2]++;
         }
@@ -348,11 +422,9 @@ public class LegitAura extends Module {
         float pitchToTarget = (float) (-Math.toDegrees(
             Math.atan2(aimDelta.y, Math.hypot(aimDelta.x, aimDelta.z))));
 
-        // Update pitch history
-        System.arraycopy(pitchHistory, 0, pitchHistory, 1, pitchHistory.length - 1);
+        System.arraycopy(pitchHistory, 0, pitchHistory, 1, 29);
         pitchHistory[0] = pitchToTarget;
 
-        // Attack logic during rotation
         if (attackCooldown >= 2 && (mc.player.getAttackCooldownProgress(0.5f) > 0.6f || timers[2] > 43.0f)
             && timers[2] >= 33.0f
             && ((attackCooldown == 4 || Math.random() > 0.5)
@@ -360,7 +432,7 @@ public class LegitAura extends Module {
             mc.interactionManager.attackEntity(mc.player, target);
             mc.player.swingHand(Hand.MAIN_HAND);
             if (Math.random() > 0.5) randomDir = !randomDir;
-            timers[2] = MathUtil.random(-10.0f, 10.0f);
+            timers[2] = MathUtil.a(-10.0f, 10.0f);
         }
 
         boolean skip = mc.player.isUsingItem() && mc.player.getItemUseTimeLeft() > 0 && attackCooldown >= 8
@@ -390,10 +462,10 @@ public class LegitAura extends Module {
             + (Math.cos(time * 0.78 + 3.1) * 1.5));
 
         float finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(),
-            pitchHistory[MathHelper.clamp(10 - attackCooldown, 0, pitchHistory.length - 1)] + (smoothH * 1.5f),
-            MathUtil.random(0.1f, 0.5f));
+            pitchHistory[MathHelper.clamp(10 - attackCooldown, 0, 29)] + (smoothH * 1.5f),
+            MathUtil.a(0.1f, 0.5f));
         float finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget + smoothW,
-            MathUtil.random(0.1f, 0.4f));
+            MathUtil.a(0.1f, 0.4f));
 
         if (timers[3] >= 0.0f) {
             if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(), attackRange.getValue(), target, true)
@@ -422,15 +494,15 @@ public class LegitAura extends Module {
         float smoothW = fSin;
         float smoothH = fSin;
 
-        float finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.random(0.2f, 0.35f));
-        float finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), pitchToTarget, MathUtil.random(0.15f, 0.25f));
+        float finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.a(0.2f, 0.35f));
+        float finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), pitchToTarget, MathUtil.a(0.15f, 0.25f));
 
         if (timers[3] >= 0.0f) {
             finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), pitchToTarget, 0.35f);
             smoothH /= 3.0f;
             smoothW /= 3.0f;
             if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(), attackRange.getValue(), target, true)) {
-                finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.random(0.7f, 1.0f));
+                finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.a(0.7f, 1.0f));
             }
         }
 

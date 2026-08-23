@@ -472,8 +472,4 @@ public class LegitAura extends Module {
             prevSlot = -1;
         }
         if (savedAxeSlot != -1) {
-            InventoryUtil.clickSlot(savedAxeSlot, findEmptyHotbarSlot(), 0, net.minecraft.screen.slot.SlotActionType.SWAP);
-            savedAxeSlot = -1;
-        }
-    }
-}
+            InventoryUtil.clickSlot(sav
