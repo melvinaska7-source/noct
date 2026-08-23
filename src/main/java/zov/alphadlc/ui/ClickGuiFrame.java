@@ -14,6 +14,7 @@ import zov.alphadlc.module.settings.ItemModelSetting;
 import zov.alphadlc.ui.component.ItemModelGalleryPopup;
 import zov.alphadlc.ui.component.SearchField;
 import zov.alphadlc.util.IMinecraft;
+import zov.alphadlc.util.base.Instance;
 import zov.alphadlc.util.cursor.CursorManager;
 import zov.alphadlc.util.render.helper.HoverUtil;
 import zov.alphadlc.util.render.math.Animation;
@@ -33,26 +34,19 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     private final ThemeEditor themeEditor = new ThemeEditor();
     private ItemModelGalleryPopup itemModelGallery;
 
-    // Плавное описание модуля
     private final Animation descAnim = new Animation(Easing.QUINTIC_OUT, 220);
     private String lastDesc = null;
 
-    // Анимация закрытия (панели улетают обратно, после чего экран закрывается)
     private boolean closing = false;
 
     // === НОВОЕ: Глобальная анимация открытия GUI из центра ===
-    // BACK_OUT даёт эффект "выстрела" — быстрый старт, небольшой перелёт за границу, возврат
     private final Animation openScaleAnim = new Animation(Easing.BACK_OUT, 420);
     private final Animation openAlphaAnim = new Animation(Easing.QUINTIC_OUT, 300);
 
-    // Курсоры создаём один раз (лениво) и меняем только при смене состояния —
-    // раньше glfwCreateStandardCursor() дёргался каждый кадр без освобождения (нативная утечка).
     private long handCursor, iBeamCursor, pointingCursor, arrowCursor;
     private boolean cursorsCreated = false;
-    private long currentCursor = 0L; // последний установленный handle (0 = системный по умолчанию)
+    private long currentCursor = 0L;
 
-    // Кэш нормализованной строки поиска, чтобы не гонять replaceAll()/toLowerCase()
-    // для каждого модуля каждый кадр.
     private String cachedRawQuery = null;
     private String cachedNormalizedQuery = "";
 
@@ -71,11 +65,9 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         currentCursor = cursor;
     }
 
-    // Сброс анимации появления — панели вылетают снизу/сверху к центру
     public void playOpenAnimation() {
         closing = false;
         itemModelGallery = null;
-        // === НОВОЕ: Сброс глобальной анимации масштаба ===
         openScaleAnim.reset(0f);
         openAlphaAnim.reset(0f);
         for (Panel panel : panels) {
@@ -102,11 +94,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         int windowWidth = mc.getWindow().getScaledWidth();
         int windowHeight = mc.getWindow().getScaledHeight();
 
-        // Масштаб GUI из настройки модуля: масштабируем всё вокруг центра экрана.
-        // Все шейпы/текст/блюр рисуются через глобальный шейдер (drawWithGlobalProgram),
-        // который берёт ModelViewMat из RenderSystem.getModelViewStack(), поэтому масштаб
-        // применяем именно к нему — тогда масштабируется РЕАЛЬНО всё. Области отсечения
-        // масштабируем отдельно через Scissor, координаты мыши — обратным преобразованием.
         float guiScale = guiScale();
         float centerX = windowWidth / 2f;
         float centerY = windowHeight / 2f;
@@ -124,15 +111,11 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         modelView.translate(-centerX, -centerY, 0f);
 
         // === НОВОЕ: Глобальная анимация открытия/закрытия GUI ===
-        // При открытии: масштаб 0→1 с эффектом BACK_OUT (выстрел из центра)
-        // При закрытии: масштаб 1→0 с QUINTIC_OUT (плавное исчезновение)
         openScaleAnim.run(closing ? 0f : 1f);
         openAlphaAnim.run(closing ? 0f : 1f);
         float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0f, 1f);
         float openAlpha = MathHelper.clamp((float) openAlphaAnim.getValue(), 0f, 1f);
 
-        // Применяем масштаб из центра экрана
-        // BACK_OUT может дать значение > 1 (перелёт), что создаёт эффект "выстрела"
         modelView.translate(centerX, centerY, 0f);
         modelView.scale(openProgress, openProgress, 1f);
         modelView.translate(-centerX, -centerY, 0f);
@@ -148,11 +131,9 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         float offscreen = windowHeight / 2f + panelHeight;
         for (int i = 0; i < panels.size(); i++) {
             Panel panel = panels.get(i);
-            // Чётные вылетают снизу, нечётные — сверху
             panel.slideDir = (i % 2 == 0) ? 1 : -1;
             panel.slideAnim.run(closing ? 0f : 1f);
             float slide = MathHelper.clamp(panel.slideAnim.getValue(), 0f, 1f);
-            // Умножаем slide на openAlpha для синхронизации с глобальной анимацией
             float effectiveSlide = slide * openAlpha;
             float yOffset = (1f - effectiveSlide) * panel.slideDir * offscreen;
 
@@ -164,7 +145,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
             panel.render(context, mouseX, mouseY, delta);
         }
 
-        // Когда анимация закрытия завершилась — закрываем экран
         if (closing) {
             boolean allClosed = true;
             for (Panel panel : panels) {
@@ -173,7 +153,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
                     break;
                 }
             }
-            // Также ждём завершения глобальной анимации
             if (openScaleAnim.getValue() > 0.02f) {
                 allClosed = false;
             }
@@ -194,7 +173,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         searchField.setBounds(searchX, searchY, searchW, searchH);
         searchField.render(context, mouseX, mouseY, delta);
 
-        // Определяем описание модуля под курсором
         String hoveredDesc = null;
         for (Panel panel : panels) {
             boolean isMouseInPanel = HoverUtil.isHovered(mouseX, mouseY, panel.getX(), panel.getY(), panel.getWidth(), panel.getHeight());
@@ -258,8 +236,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (itemModelGallery != null) {
-            if (itemModelGallery.mouseClicked(mouseX, mouseY, button)) return true;
-            itemModelGallery = null;
+            itemModelGallery.mouseClicked(mouseX, mouseY, button);
             return true;
         }
         if (themeEditor.mouseClicked(mouseX, mouseY, button)) return true;
@@ -322,16 +299,24 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (searchField.keyPressed(keyCode, scanCode, modifiers)) return true;
+        if (itemModelGallery != null) {
+            itemModelGallery.keyPressed(keyCode, scanCode, modifiers);
+            return true;
+        }
+        searchField.keyPressed(keyCode, scanCode, modifiers);
         for (Panel panel : panels) {
-            if (panel.keyPressed(keyCode, scanCode, modifiers)) return true;
+            panel.keyPressed(keyCode, scanCode, modifiers);
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
     public boolean charTyped(char chr, int modifiers) {
-        if (searchField.charTyped(chr, modifiers)) return true;
+        if (itemModelGallery != null) {
+            itemModelGallery.charTyped(chr, modifiers);
+            return true;
+        }
+        searchField.charTyped(chr, modifiers);
         return super.charTyped(chr, modifiers);
     }
 
@@ -349,7 +334,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     public void close() {
         if (closing) return;
         closing = true;
-        // === НОВОЕ: Запускаем анимацию закрытия ===
         openScaleAnim.animateTo(0f);
         openAlphaAnim.animateTo(0f);
         for (Panel panel : panels) {
@@ -358,7 +342,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     public void openItemModelGallery(ItemModelSetting setting) {
-        itemModelGallery = new ItemModelGalleryPopup(setting, () -> itemModelGallery = null);
+        itemModelGallery = new ItemModelGalleryPopup(setting);
     }
 
     public boolean searchCheck(String moduleName) {
@@ -377,6 +361,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
     }
 
     private float guiScale() {
-        return zov.alphadlc.module.list.render.ClickGui.getInstance().scale.getValue().floatValue();
+        ClickGui module = Instance.get(ClickGui.class);
+        return module != null ? (float) module.size.getValue() : 1f;
     }
 }

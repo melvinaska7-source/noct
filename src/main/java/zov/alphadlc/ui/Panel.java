@@ -30,15 +30,13 @@ public class Panel implements IMinecraft {
     private Animation animation = new Animation(Easing.QUINTIC_OUT, 350);
     private Animation animationAlpha = new Animation(Easing.BOUNCE_OUT, 350);
     private final Animation scrollbarAnim = new Animation(Easing.CUBIC_IN_OUT, 220);
-    // Анимация появления/закрытия панели (вылет снизу/сверху к центру)
     public final Animation slideAnim = new Animation(Easing.QUINTIC_OUT, 320);
-    public int slideDir = 1; // +1 — снизу, -1 — сверху
+    public int slideDir = 1;
     float scroll;
     float maxScroll;
 
     private final ClickGuiFrame parent;
 
-    // Кэш статичных данных заголовка панели
     private String cachedTitle;
     private String cachedIcon;
     private float cachedTitleWidth = -1f;
@@ -62,23 +60,20 @@ public class Panel implements IMinecraft {
     }
 
     public void render(DrawContext context, int mouseX, int mouseY, float partialTicks) {
-        // Прозрачность панели ведётся анимацией появления/закрытия
         float alphaRatio = MathHelper.clamp(slideAnim.getValue(), 0f, 1f);
         animationAlpha.setValue(alphaRatio);
         float alpha = Math.min(255 * alphaRatio, 255);
         float cornerRadius = 8f;
         float headerHeight = 25f;
 
-        // Если панель полностью невидима — не рендерим
         if (alphaRatio < 0.001f) return;
 
-        // Фон панели
         int panelColor = ColorProvider.setAlpha(ColorProvider.getColorClickGui(), (int)(130 * alphaRatio));
 
         DrawUtil.drawRoundBlur(x, y, width, height, cornerRadius, ColorProvider.rgba(200, 200, 200, (int)(255 * alphaRatio)), 14f);
         DrawUtil.drawRound(x - 1f, y - 1f, width + 2f, height + 2f, cornerRadius + 0.5f, ColorProvider.rgba(48, 66, 122, (int)(70 * alphaRatio)));
         DrawUtil.drawRound(x, y, width, height, cornerRadius, panelColor);
-
+        
         DrawUtil.drawRound(x, y, width, headerHeight, new org.joml.Vector4f(cornerRadius, 0, 0, cornerRadius), ColorProvider.setAlpha(ColorProvider.getColorHeaderBg(), (int)(45 * alphaRatio)));
 
         float iconSize = 8.5f;
@@ -176,13 +171,12 @@ public class Panel implements IMinecraft {
         }
     }
 
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public void keyPressed(int keyCode, int scanCode, int modifiers) {
         for (ModuleComponent moduleComponent : moduleComponents) {
             if (!parent.searchCheck(moduleComponent.getModule().getName())) {
-                if (moduleComponent.keyPressed(keyCode, scanCode, modifiers)) return true;
+                moduleComponent.keyPressed(keyCode, scanCode, modifiers);
             }
         }
-        return false;
     }
 
     public void openItemModelGallery(ItemModelSetting setting) {

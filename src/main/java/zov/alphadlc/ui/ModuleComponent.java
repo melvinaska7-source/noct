@@ -32,7 +32,6 @@ public class ModuleComponent extends Component {
 
     private final ObjectArrayList<Component> components = new ObjectArrayList<>();
 
-    // Ширина статичной иконки "{/}" не меняется — измеряем один раз.
     private static float cachedSettingsIconWidth = -1f;
 
     public ModuleComponent(Module module, Panel panel) {
@@ -75,7 +74,6 @@ public class ModuleComponent extends Component {
         float highlightProgress = Math.max(hoverAnim.getValue(), enabledAnim.getValue());
         int outlineAlpha = (int) ((25 + (40 * highlightProgress)) * alpha);
 
-        int outlineColor = ColorProvider.rgba(255, 255, 255, outlineAlpha);
         int innerColor = ColorProvider.interpolateColor(
                 ColorProvider.setAlpha(ColorProvider.getColorMain(), (int)(28 * alpha)),
                 ColorProvider.setAlpha(ColorProvider.getColorVisualModules(), (int)(22 * alpha)),
@@ -84,7 +82,6 @@ public class ModuleComponent extends Component {
 
         float currentHeight = 19f + ((height - 19f) * animation.getValue());
 
-        // Отсечение полностью невидимых карточек
         float visTop = panel.getY() + 25f;
         float visBottom = panel.getY() + panel.getHeight() - 4f;
         if (y + currentHeight < visTop || y > visBottom) {
@@ -92,7 +89,6 @@ public class ModuleComponent extends Component {
             return;
         }
 
-        // Матовый блюр под карточкой модуля
         DrawUtil.drawRoundBlur(x, y, width, currentHeight - 0.5f, 3f, ColorProvider.rgba(200, 200, 200, (int)(255 * alpha)), 10f);
         DrawUtil.drawRound(x - 1f, y - 1f, width + 2f, currentHeight + 1f, 3.5f, ColorProvider.rgba(48, 66, 122, (int)(55 * alpha)));
         DrawUtil.drawRound(x, y, width, currentHeight - 0.5f, 3f, innerColor);
@@ -101,14 +97,14 @@ public class ModuleComponent extends Component {
             DrawUtil.drawText(Fonts.SFREGULAR.get(), "Нажмите клавишу...", x + width / 2f - Fonts.SFREGULAR.get().getWidth("Нажмите клавишу...", 7.5f) / 2f, y + 5.75f, ColorProvider.rgba(255, 255, 255, (int)(255 * alpha)), 7.5f);
         } else {
             float textY = y + 5.75f;
-
+            
             if (!components.isEmpty()) {
                 String icon = "{/}";
                 if (cachedSettingsIconWidth < 0f) {
                     cachedSettingsIconWidth = Fonts.SFREGULAR.get().getWidth(icon, 7.5f);
                 }
                 float iconWidth = cachedSettingsIconWidth;
-
+                
                 DrawUtil.drawText(Fonts.SFREGULAR.get(), icon, x + 3f, textY, 
                     ColorProvider.setAlpha(ColorProvider.getColorInactiveText(), (int)(180 * alpha)), 7.5f);
                 DrawUtil.drawText(Fonts.SFREGULAR.get(), " " + module.getName(), x + 3f + iconWidth, textY, textColor, 7.5f);
@@ -116,19 +112,18 @@ public class ModuleComponent extends Component {
                 DrawUtil.drawText(Fonts.SFREGULAR.get(), module.getName(), x + 3f, textY, textColor, 7.5f);
             }
 
-            // Переключатель справа
             float toggleW = 20f;
             float toggleH = 10f;
             float toggleX = x + width - toggleW - 4f;
             float toggleY = y + (19f - toggleH) / 2f;
-
+            
             int toggleBgColor = ColorProvider.interpolateColor(
                 ColorProvider.rgba(40, 52, 92, (int)(150 * alpha)),
                 ColorProvider.setAlpha(ColorProvider.getColorVisualModules(), (int)(200 * alpha)),
                 enabledAnim.getValue()
             );
             DrawUtil.drawRound(toggleX, toggleY, toggleW, toggleH, toggleH / 2f, toggleBgColor);
-
+            
             float circleSize = toggleH - 2.5f;
             float circleX = toggleX + 1.25f + ((toggleW - circleSize - 2.5f) * enabledAnim.getValue());
             float circleY = toggleY + 1.25f;
@@ -152,13 +147,8 @@ public class ModuleComponent extends Component {
             }
 
             // === НОВОЕ: Анимация выпадания настроек с stagger-эффектом ===
-            // Каждый компонент появляется с задержкой относительно предыдущего
             float animProgress = (float) animation.getValue();
             int compIndex = 0;
-            int visibleCount = 0;
-            for (Component c : components) {
-                if (c.isVisible() || c.getAlphaAnimSetting().getValue() > 0f) visibleCount++;
-            }
 
             for (Component component : components) {
                 component.getAlphaAnim().setValue(Math.min(panel.getAnimationAlpha().getValue(), 1) * animProgress);
@@ -170,10 +160,9 @@ public class ModuleComponent extends Component {
                     component.setY(compY);
                     component.setWidth(width - 4);
 
-                    // === STAGGER АНИМАЦИЯ ===
-                    // Задержка между компонентами: каждый следующий начинает появляться позже
-                    float staggerDelay = compIndex * 0.06f; // 60ms задержка между компонентами
-                    float staggerDuration = 0.3f; // Базовая длительность
+                    // STAGGER АНИМАЦИЯ
+                    float staggerDelay = compIndex * 0.06f;
+                    float staggerDuration = 0.3f;
                     float effectiveProgress;
                     if (animProgress <= staggerDelay) {
                         effectiveProgress = 0f;
@@ -181,29 +170,23 @@ public class ModuleComponent extends Component {
                         effectiveProgress = 1f;
                     } else {
                         effectiveProgress = (animProgress - staggerDelay) / staggerDuration;
-                        // Применяем easing к stagger
                         effectiveProgress = (float) Easing.QUINTIC_OUT.ease(effectiveProgress, 0, 1, 1);
                     }
-
-                    // Запускаем slideY анимацию для компонента
+                    
                     component.getSlideYAnim().run(open ? 1f : 0f);
                     float slideYProgress = (float) component.getSlideYAnim().getValue();
-
-                    // Сдвиг по Y: компонент "падает" сверху на своё место
+                    
                     float slideOffset = (1f - slideYProgress) * -6f * effectiveProgress;
-                    // Масштаб по Y: компонент "растягивается" из точки
                     float scaleY = 0.7f + 0.3f * slideYProgress * effectiveProgress;
 
                     zov.alphadlc.util.render.math.Scissor.push();
                     zov.alphadlc.util.render.math.Scissor.setFromComponentCoordinates(x, intersectY, width, intersectHeight);
 
-                    // Применяем трансформации матрицы для эффекта выпадания
                     context.getMatrices().push();
-
-                    // Центр трансформации — центр компонента
+                    
                     float compCenterX = component.getX() + component.getWidth() / 2f;
                     float compCenterY = component.getY() + component.getHeight() / 2f;
-
+                    
                     context.getMatrices().translate(compCenterX, compCenterY + slideOffset, 0);
                     context.getMatrices().scale(1f, scaleY, 1f);
                     context.getMatrices().translate(-compCenterX, -compCenterY, 0);
@@ -257,11 +240,11 @@ public class ModuleComponent extends Component {
                 return;
             }
             if (keyCode == GLFW.GLFW_KEY_DELETE) {
-                module.setKeyBind(GLFW.GLFW_KEY_UNKNOWN);
+                module.setKey(GLFW.GLFW_KEY_UNKNOWN);
                 binding = false;
                 return;
             }
-            module.setKeyBind(keyCode);
+            module.setKey(keyCode);
             binding = false;
             return;
         }
