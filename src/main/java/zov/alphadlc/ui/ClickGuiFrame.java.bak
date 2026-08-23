@@ -39,6 +39,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     private boolean closing = false;
 
+    // === НОВОЕ: Глобальная анимация открытия GUI из центра ===
     private final Animation openScaleAnim = new Animation(Easing.BACK_OUT, 420);
     private final Animation openAlphaAnim = new Animation(Easing.QUINTIC_OUT, 300);
 
@@ -109,6 +110,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
         modelView.scale(guiScale, guiScale, 1f);
         modelView.translate(-centerX, -centerY, 0f);
 
+        // === НОВОЕ: Глобальная анимация открытия/закрытия GUI ===
         openScaleAnim.run(closing ? 0f : 1f);
         openAlphaAnim.run(closing ? 0f : 1f);
         float openProgress = MathHelper.clamp((float) openScaleAnim.getValue(), 0f, 1f);
@@ -143,7 +145,6 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
             panel.render(context, mouseX, mouseY, delta);
         }
 
-        // === ИСПРАВЛЕНО: Закрываем экран через mc.setScreen(null) ===
         if (closing) {
             boolean allClosed = true;
             for (Panel panel : panels) {
@@ -159,7 +160,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
                 closing = false;
                 modelView.popMatrix();
                 zov.alphadlc.util.render.math.Scissor.resetGuiTransform();
-                mc.setScreen(null); // <-- ВОТ ЭТО ГЛАВНОЕ
+                close();
                 return;
             }
         }
@@ -298,6 +299,7 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // === Закрытие GUI на ESC с анимацией ===
         if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
             close();
             return true;
