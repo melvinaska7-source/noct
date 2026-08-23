@@ -299,6 +299,12 @@ public class ClickGuiFrame extends Screen implements IMinecraft {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // === Закрытие GUI на ESC с анимацией ===
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            close();
+            return true;
+        }
+        
         if (itemModelGallery != null) {
             itemModelGallery.keyPressed(keyCode, scanCode, modifiers);
             return true;
