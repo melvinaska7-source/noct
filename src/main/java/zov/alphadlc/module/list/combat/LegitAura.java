@@ -1,0 +1,551 @@
+package zov.alphadlc.module.list.combat;
+
+import com.google.common.eventbus.Subscribe;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.boss.dragon.EnderDragonEntity;
+import net.minecraft.entity.mob.AmbientEntity;
+import net.minecraft.entity.mob.FlyingEntity;
+import net.minecraft.entity.mob.HostileEntity;
+import net.minecraft.entity.mob.SlimeEntity;
+import net.minecraft.entity.passive.AllayEntity;
+import net.minecraft.entity.passive.GolemEntity;
+import net.minecraft.entity.passive.PassiveEntity;
+import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.AxeItem;
+import net.minecraft.item.Items;
+import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.math.Vec3d;
+import zov.alphadlc.util.friend.FriendRepository;
+import zov.alphadlc.event.list.EventPlayerUpdate;
+import zov.alphadlc.event.list.EventTick;
+import zov.alphadlc.module.Module;
+import zov.alphadlc.module.ModuleCategory;
+import zov.alphadlc.module.ModuleInformation;
+import zov.alphadlc.module.settings.BooleanSetting;
+import zov.alphadlc.module.settings.ModeSetting;
+import zov.alphadlc.module.settings.SliderSetting;
+import zov.alphadlc.ui.ClickGuiFrame;
+import zov.alphadlc.util.IMinecraft;
+import zov.alphadlc.util.math.MathUtil;
+import zov.alphadlc.util.player.combat.AuraUtil;
+import zov.alphadlc.util.player.combat.MaceUtil;
+import zov.alphadlc.util.player.move.MoveUtil;
+import zov.alphadlc.util.player.other.InventoryUtil;
+import zov.alphadlc.util.rotation.Rotation;
+import zov.alphadlc.util.rotation.RotationComponent;
+
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.stream.StreamSupport;
+
+/**
+ * LegitAura — лучшая легит KillAura для обхода Full Tilt и подобных античитов.
+ * Human-like ротации, GCD-фикс, адаптивные удары, умный выбор точек aim'а.
+ */
+@ModuleInformation(
+    moduleName = "LegitAura",
+    moduleDesc = "Лучшая легит KillAura для обхода античитов",
+    moduleCategory = ModuleCategory.COMBAT,
+    moduleKeybind = -1
+)
+public class LegitAura extends Module {
+
+    // === Settings ===
+    private final ModeSetting rotationType = new ModeSetting("Тип ротации", "ФанТайм", "ФанТайм", "ФанТайм ФОВ", "Легит");
+    private final ModeSetting targetPriority = new ModeSetting("Приоритет", "Прицел", "Прицел", "Дистанция", "ХП");
+    private final ModeSetting targetMode = new ModeSetting("Цели", "Игроки", "Игроки", "Все", "Мобы");
+    private final SliderSetting attackRange = new SliderSetting("Дистанция", 3.0f, 0.1f, 6.0f, 0.1f);
+    private final SliderSetting extraReach = new SliderSetting("Доп. дистанция", 0.5f, 0.0f, 3.0f, 0.1f);
+    private final SliderSetting fov = new SliderSetting("FOV", 120.0f, 30.0f, 180.0f, 5.0f);
+    private final BooleanSetting onlyCrits = new BooleanSetting("Только криты", true);
+    private final BooleanSetting adaptiveHits = new BooleanSetting("Адаптивные удары", true);
+    private final BooleanSetting shieldBreaker = new BooleanSetting("Пробитие щита", true);
+    private final BooleanSetting smartSprint = new BooleanSetting("Умный спринт", false);
+    private final BooleanSetting wallCheck = new BooleanSetting("Проверка стен", true);
+    private final BooleanSetting autoMace = new BooleanSetting("Авто-булава", true);
+    private final BooleanSetting moveCorrection = new BooleanSetting("Коррекция движения", true);
+    private final BooleanSetting hitThroughWalls = new BooleanSetting("Сквозь стены", false);
+
+    // === State ===
+    private LivingEntity target;
+    private int attackCooldown = 0;
+    private int prevSlot = -1;
+    private int savedAxeSlot = -1;
+    private boolean wasSprinting = false;
+    private boolean randomDir = false;
+    private float[] pitchHistory = new float[30];
+    private float[] timers = new float[12];
+
+    @Override
+    public void onEnable() {
+        target = null;
+        attackCooldown = 0;
+        prevSlot = -1;
+        savedAxeSlot = -1;
+        wasSprinting = false;
+        randomDir = false;
+        Arrays.fill(pitchHistory, mc.player != null ? mc.player.getPitch() : 0.0f);
+        Arrays.fill(timers, 0.0f);
+        timers[9] = MathUtil.a(9.0f, 13.0f);
+    }
+
+    @Override
+    public void onDisable() {
+        target = null;
+        restoreSlot();
+    }
+    @Subscribe
+    public void onTick(EventTick event) {
+        if (mc.player == null || mc.world == null) return;
+
+        if (!isValidTarget(target)) {
+            LivingEntity prev = target;
+            target = findTarget().orElse(null);
+            if (target != prev && target != null) {
+                Arrays.fill(pitchHistory, mc.player.getPitch());
+                timers[10] = 0;
+                timers[11] = 0;
+            }
+        }
+
+        restoreSlot();
+
+        if (target != null) {
+            performAttack();
+            rotateToTarget();
+            performAttack();
+        } else {
+            timers[8] = 1.0f;
+        }
+
+        timers[3] = Math.max(0, timers[3] - 1);
+        timers[5] = Math.max(-1, timers[5] - 1);
+        timers[8] = Math.max(0, timers[8] - 1);
+        if (timers[0] > 0) timers[0]--;
+
+        attackCooldown++;
+    }
+
+    @Subscribe
+    public void onPlayerUpdate(EventPlayerUpdate event) {
+        if (target != null && moveCorrection.getValue()) {
+            float yawToTarget = (float) MathHelper.wrapDegrees(
+                Math.toDegrees(Math.atan2(target.getZ() - mc.player.getZ(),
+                    target.getX() - mc.player.getX())) - 90.0);
+            MoveUtil.fixMovement(event, yawToTarget);
+        }
+
+        if (timers[0] > 0 && target != null && AuraUtil.isInReach(target, attackRange.getValue())) {
+            event.setForward(0.0f);
+            event.setStrafe(0.0f);
+            timers[0]--;
+        }
+    }
+    private Optional<LivingEntity> findTarget() {
+        if (mc.world == null || mc.player == null) return Optional.empty();
+
+        double reach = attackRange.getValue() + extraReach.getValue();
+        float fovVal = fov.getValue();
+        Vec3d eye = mc.player.getEyePos();
+
+        Comparator<LivingEntity> comparator;
+        switch (targetPriority.getValue()) {
+            case "Дистанция" -> comparator = Comparator.comparingDouble(AuraUtil::distanceSqToEntity);
+            case "ХП" -> comparator = Comparator.comparingDouble(LivingEntity::getHealth);
+            default -> comparator = Comparator.comparingDouble(e3 -> {
+                Vec3d toCenter = e3.getBoundingBox().getCenter().subtract(eye).normalize();
+                Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+                return Math.acos(MathHelper.clamp(look.dotProduct(toCenter), -1.0, 1.0));
+            });
+        }
+
+        return StreamSupport.stream(mc.world.getEntities().spliterator(), false)
+            .filter(LivingEntity.class::isInstance)
+            .map(LivingEntity.class::cast)
+            .filter(e -> e != mc.player && e.isAlive())
+            .filter(this::isValidTargetType)
+            .filter(e -> AuraUtil.isInReach(e, reach))
+            .filter(e -> isInFov(e, fovVal))
+            .filter(e -> hitThroughWalls.getValue() || AuraUtil.isVisible(eye, e, reach))
+            .min(comparator);
+    }
+
+    private boolean isValidTarget(LivingEntity entity) {
+        if (entity == null || !entity.isAlive()) return false;
+        double reach = attackRange.getValue() + extraReach.getValue();
+        return AuraUtil.isInReach(entity, reach)
+            && isValidTargetType(entity)
+            && (hitThroughWalls.getValue() || AuraUtil.isVisible(mc.player.getEyePos(), entity, reach));
+    }
+
+    private boolean isValidTargetType(LivingEntity entity) {
+        String mode = targetMode.getValue();
+        if (mode.equals("Игроки") && !(entity instanceof PlayerEntity)) return false;
+        if (mode.equals("Мобы") && (entity instanceof PlayerEntity)) return false;
+
+        if (entity instanceof PlayerEntity player) {
+            if (FriendRepository.isFriend(player.getNameForScoreboard()))
+                return false;
+            boolean naked = Stream.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
+                .noneMatch(slot -> player.getEquippedStack(slot).getItem() instanceof ArmorItem);
+            return !naked;
+        }
+        return (entity instanceof HostileEntity)
+            || (entity instanceof SlimeEntity)
+            || (entity instanceof FlyingEntity)
+            || (entity instanceof EnderDragonEntity)
+            || (entity instanceof PassiveEntity)
+            || (entity instanceof GolemEntity)
+            || (entity instanceof AllayEntity)
+            || (entity instanceof AmbientEntity);
+    }
+
+    private boolean isInFov(Entity entity, float maxFov) {
+        if (maxFov >= 180.0f) return true;
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d toEntity = entity.getBoundingBox().getCenter().subtract(eye).normalize();
+        Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+        double angle = Math.toDegrees(Math.acos(MathHelper.clamp(look.dotProduct(toEntity), -1.0, 1.0)));
+        return angle <= maxFov / 2.0f;
+    }
+    private void performAttack() {
+        if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
+            attackRange.getValue(), target, wallCheck.getValue())) {
+           InReach(target, attackRange.getValue())) {
+            event.setForward(0.0f);
+            event.setStrafe(0.0f);
+            timers[0]--;
+        }
+    }
+    private Optional<LivingEntity> findTarget() {
+        if (mc.world == null || mc.player == null) return Optional.empty();
+
+        double reach = attackRange.getValue() + extraReach.getValue();
+        float fovVal = fov.getValue();
+        Vec3d eye = mc.player.getEyePos();
+
+        Comparator<LivingEntity> comparator;
+        switch (targetPriority.getValue()) {
+            case "Дистанция" -> comparator = Comparator.comparingDouble(AuraUtil::distanceSqToEntity);
+            case "ХП" -> comparator = Comparator.comparingDouble(LivingEntity::getHealth);
+            default -> comparator = Comparator.comparingDouble(e3 -> {
+                Vec3d toCenter = e3.getBoundingBox().getCenter().subtract(eye).normalize();
+                Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+                return Math.acos(MathHelper.clamp(look.dotProduct(toCenter), -1.0, 1.0));
+            });
+        }
+
+        return StreamSupport.stream(mc.world.getEntities().spliterator(), false)
+            .filter(LivingEntity.class::isInstance)
+            .map(LivingEntity.class::cast)
+            .filter(e -> e != mc.player && e.isAlive())
+            .filter(this::isValidTargetType)
+            .filter(e -> AuraUtil.isInReach(e, reach))
+            .filter(e -> isInFov(e, fovVal))
+            .filter(e -> hitThroughWalls.getValue() || AuraUtil.isVisible(eye, e, reach))
+            .min(comparator);
+    }
+
+    private boolean isValidTarget(LivingEntity entity) {
+        if (entity == null || !entity.isAlive()) return false;
+        double reach = attackRange.getValue() + extraReach.getValue();
+        return AuraUtil.isInReach(entity, reach)
+            && isValidTargetType(entity)
+            && (hitThroughWalls.getValue() || AuraUtil.isVisible(mc.player.getEyePos(), entity, reach));
+    }
+
+    private boolean isValidTargetType(LivingEntity entity) {
+        String mode = targetMode.getValue();
+        if (mode.equals("Игроки") && !(entity instanceof PlayerEntity)) return false;
+        if (mode.equals("Мобы") && (entity instanceof PlayerEntity)) return false;
+
+        if (entity instanceof PlayerEntity player) {
+            if (FriendRepository.isFriend(player.getNameForScoreboard()))
+                return false;
+            boolean naked = Stream.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET)
+                .noneMatch(slot -> player.getEquippedStack(slot).getItem() instanceof ArmorItem);
+            return !naked;
+        }
+        return (entity instanceof HostileEntity)
+            || (entity instanceof SlimeEntity)
+            || (entity instanceof FlyingEntity)
+            || (entity instanceof EnderDragonEntity)
+            || (entity instanceof PassiveEntity)
+            || (entity instanceof GolemEntity)
+            || (entity instanceof AllayEntity)
+            || (entity instanceof AmbientEntity);
+    }
+
+    private boolean isInFov(Entity entity, float maxFov) {
+        if (maxFov >= 180.0f) return true;
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d toEntity = entity.getBoundingBox().getCenter().subtract(eye).normalize();
+        Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
+        double angle = Math.toDegrees(Math.acos(MathHelper.clamp(look.dotProduct(toEntity), -1.0, 1.0)));
+        return angle <= maxFov / 2.0f;
+    }
+    private void performAttack() {
+        if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
+            attackRange.getValue(), target, wallCheck.getValue())) {
+            return;
+        }
+
+        if (shieldBreaker.getValue() && target.isBlocking()) {
+            handleShieldBreak();
+            return;
+        }
+
+        if (!canAttackNow()) return;
+
+        if (autoMace.getValue() && MaceUtil.hasMace()) {
+            handleMaceAttack();
+            return;
+        }
+
+        doLegitAttack();
+    }
+
+    private void handleShieldBreak() {
+        int hotbarAxe = findAxe(0, 9);
+        if (hotbarAxe != -1) {
+            if (mc.player.getInventory().selectedSlot != hotbarAxe) {
+                if (prevSlot == -1) prevSlot = mc.player.getInventory().selectedSlot;
+                mc.player.getInventory().selectedSlot = hotbarAxe;
+            }
+            doLegitAttack();
+            return;
+        }
+
+        int invAxe = findAxe(9, 36);
+        if (invAxe != -1 && savedAxeSlot == -1) {
+            savedAxeSlot = invAxe;
+            int emptySlot = findEmptyHotbarSlot();
+            if (emptySlot != -1) {
+                InventoryUtil.clickSlot(invAxe, emptySlot, 0, net.minecraft.screen.slot.SlotActionType.SWAP);
+            }
+        }
+    }
+
+    private void handleMaceAttack() {
+        int maceSlot = MaceUtil.findMaceSlot();
+        if (maceSlot == -1) return;
+
+        if (mc.player.getInventory().selectedSlot != maceSlot) {
+            if (prevSlot == -1) prevSlot = mc.player.getInventory().selectedSlot;
+            mc.player.getInventory().selectedSlot = maceSlot;
+        }
+
+        if (mc.player.fallDistance > 1.5f || MaceUtil.willLandSoon()) {
+            doLegitAttack();
+        }
+    }
+
+    private void doLegitAttack() {
+        if (onlyCrits.getValue() && mc.player.isSprinting()
+            && !mc.player.isTouchingWater() && !mc.player.isInLava()
+            && !mc.player.isSwimming() && !mc.player.isOnGround()) {
+            if (!smartSprint.getValue()) {
+                mc.player.setSprinting(false);
+                mc.player.networkHandler.sendPacket(
+                    new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
+                timers[0] = 1.0f;
+            } else {
+                timers[0] = 1.0f;
+                if (mc.player.isSprinting()) return;
+            }
+        }
+
+        if (mc.interactionManager != null) {
+            timers[3] = 0.0f;
+            mc.interactionManager.attackEntity(mc.player, target);
+            mc.player.swingHand(Hand.MAIN_HAND);
+            attackCooldown = 0;
+            timers[5] = MathUtil.a(8.0f, 10.0f);
+            timers[9] = MathUtil.a(9.0f, 13.0f);
+
+            if (timers[2] == -1.0f) {
+                timers[4] = MathUtil.a(30.0f, 35.0f);
+            }
+            timers[2]++;
+        }
+    }
+
+    private boolean canAttackNow() {
+        if (mc.player.isUsingItem() && mc.player.getItemUseTimeLeft() > 0 && attackCooldown >= 8) {
+            attackCooldown = 8;
+            return false;
+        }
+
+        if (mc.currentScreen != null && !(mc.currentScreen instanceof ClickGuiFrame)) {
+            return false;
+        }
+
+        if (!AuraUtil.isInReach(target, attackRange.getValue())) return false;
+
+        if (autoMace.getValue() && MaceUtil.isHoldingMace()) {
+            if (mc.player.getItemCooldownManager().isCoolingDown(mc.player.getMainHandStack()))
+                return false;
+        } else if (mc.player.fallDistance > 1.5f) {
+            if (mc.player.getItemCooldownManager().isCoolingDown(mc.player.getMainHandStack()) || attackCooldown <= 3)
+                return false;
+        } else if (MaceUtil.isHoldingMace()) {
+            if (mc.player.getItemCooldownManager().isCoolingDown(mc.player.getMainHandStack())
+                || mc.player.getAttackCooldownProgress(0.5f) < 0.9f)
+                return false;
+        } else if (mc.player.getAttackCooldownProgress(0.5f) < 0.9f || attackCooldown < 10) {
+            return false;
+        }
+
+        return AuraUtil.canCrit()
+            || (adaptiveHits.getValue() && mc.player.isOnGround() && !mc.player.input.playerInput.jump())
+            || !AuraUtil.isCritReady();
+    }
+
+    private void rotateToTarget() {
+        if (target == null) return;
+
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d aimDelta = AuraUtil.findAimPoint(eye, target, attackRange.getValue(), wallCheck.getValue());
+
+        if (aimDelta.equals(Vec3d.ZERO)) {
+            aimDelta = target.getBoundingBox().getCenter().subtract(eye);
+        }
+
+        float yawToTarget = (float) MathHelper.wrapDegrees(
+            Math.toDegrees(Math.atan2(aimDelta.z, aimDelta.x)) - 90.0);
+        float pitchToTarget = (float) (-Math.toDegrees(
+            Math.atan2(aimDelta.y, Math.hypot(aimDelta.x, aimDelta.z))));
+
+        System.arraycopy(pitchHistory, 0, pitchHistory, 1, 29);
+        pitchHistory[0] = pitchToTarget;
+
+        if (attackCooldown >= 2 && (mc.player.getAttackCooldownProgress(0.5f) > 0.6f || timers[2] > 43.0f)
+            && timers[2] >= 33.0f
+            && ((attackCooldown == 4 || Math.random() > 0.5)
+            && (!randomDir || !AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(), 3.0f, target, false)))) {
+            mc.interactionManager.attackEntity(mc.player, target);
+            mc.player.swingHand(Hand.MAIN_HAND);
+            if (Math.random() > 0.5) randomDir = !randomDir;
+            timers[2] = MathUtil.a(-10.0f, 10.0f);
+        }
+
+        boolean skip = mc.player.isUsingItem() && mc.player.getItemUseTimeLeft() > 0 && attackCooldown >= 8
+            || (mc.currentScreen != null && !(mc.currentScreen instanceof ClickGuiFrame));
+
+        if ((timers[3] <= 0.0f && canAttackNow()) || AuraUtil.shouldAttackWithCooldown(attackCooldown, target, skip)) {
+            timers[3] = 1.0f;
+            if (!mc.player.isTouchingWater() && smartSprint.getValue() && !mc.player.isOnGround()) {
+                timers[0] = 1.0f;
+            }
+        }
+
+        switch (rotationType.getValue()) {
+            case "ФанТайм", "ФанТайм ФОВ" -> applyFantimeRotation(yawToTarget, pitchToTarget, aimDelta);
+            case "Легит" -> applyLegitRotation(yawToTarget, pitchToTarget, aimDelta);
+        }
+
+        timers[1] = (float) MathHelper.wrapDegrees(
+            Math.toDegrees(Math.atan2(target.getZ() - mc.player.getZ(), target.getX() - mc.player.getX())) - 90.0);
+    }
+
+    private void applyFantimeRotation(float yawToTarget, float pitchToTarget, Vec3d aimDelta) {
+        float time = mc.player.age + mc.getRenderTickCounter().getTickDelta(false);
+        float smoothW = (float) ((Math.sin(time * 0.4) * 3.0)
+            + (Math.sin(time * 0.95 + 1.4) * 2.0));
+        float smoothH = (float) ((Math.cos(time * 0.5 + 0.7) * 0.5)
+            + (Math.cos(time * 0.78 + 3.1) * 1.5));
+
+        float finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(),
+            pitchHistory[MathHelper.clamp(10 - attackCooldown, 0, 29)] + (smoothH * 1.5f),
+            MathUtil.a(0.1f, 0.5f));
+        float finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget + smoothW,
+            MathUtil.a(0.1f, 0.4f));
+
+        if (timers[3] >= 0.0f) {
+            if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(), attackRange.getValue(), target, true)
+                && timers[8] <= 0.0f) {
+                finalYaw = yawToTarget;
+            }
+            if (!AuraUtil.canAttack(yawToTarget, finalPitch, attackRange.getValue(), target, true)
+                && timers[8] <= 0.0f) {
+                finalPitch = pitchToTarget;
+            }
+        }
+
+        if (attackCooldown <= 4 && timers[2] % 2.0f == 0.0f) {
+            finalYaw = mc.player.getYaw();
+        }
+
+        float pitchOut = rotationType.getValue().equals("ФанТайм") ? finalPitch : mc.player.getPitch();
+        RotationComponent.update(new Rotation(finalYaw + smoothW, pitchOut + smoothH),
+            220.0f, 220.0f, 220.0f, 220.0f, 1, 1, true);
+    }
+
+    private void applyLegitRotation(float yawToTarget, float pitchToTarget, Vec3d aimDelta) {
+        float t = mc.player.age + mc.getRenderTickCounter().getTickDelta(false);
+        float fSin = (float) (((Math.sin(t * 0.31f) * 0.5)
+            + (Math.sin(t * 1.7f + 2.6f) * 0.2)) * 8.0f) / 4.0f;
+        float smoothW = fSin;
+        float smoothH = fSin;
+
+        float finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.a(0.2f, 0.35f));
+        float finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), pitchToTarget, MathUtil.a(0.15f, 0.25f));
+
+        if (timers[3] >= 0.0f) {
+            finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), pitchToTarget, 0.35f);
+            smoothH /= 3.0f;
+            smoothW /= 3.0f;
+            if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(), attackRange.getValue(), target, true)) {
+                finalYaw = AuraUtil.smoothRotation(mc.player.getYaw(), yawToTarget, MathUtil.a(0.7f, 1.0f));
+            }
+        }
+
+        if (!AuraUtil.canAttack(finalYaw + smoothW, finalPitch + smoothH, attackRange.getValue(), target, true)
+            && AuraUtil.canAttack(yawToTarget, pitchToTarget, attackRange.getValue(), target, true)) {
+            smoothW = MathHelper.clamp(smoothW, -0.15f, 0.15f);
+            smoothH = MathHelper.clamp(smoothH, -0.15f, 0.15f);
+        }
+
+        if (timers[5] >= 0.0f) {
+            smoothW *= 8.0f;
+            if (attackCooldown >= 1 && timers[2] % 5.0f == 0.0f) {
+                finalPitch = AuraUtil.smoothRotation(mc.player.getPitch(), -pitchToTarget, 0.05f);
+            }
+        }
+
+        RotationComponent.update(new Rotation(finalYaw + smoothW, finalPitch + smoothH),
+            180.0f, 180.0f, 180.0f, 180.0f, 1, 1, true);
+    }
+
+    private int findAxe(int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() instanceof AxeItem) return i;
+        }
+        return -1;
+    }
+
+    private int findEmptyHotbarSlot() {
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+        }
+        return -1;
+    }
+
+    private void restoreSlot() {
+        if (shieldBreaker.getValue() && target != null && target.isBlocking()) return;
+        if (prevSlot != -1) {
+            mc.player.getInventory().selectedSlot = prevSlot;
+            prevSlot = -1;
+        }
+        if (savedAxeSlot != -1) {
+            InventoryUtil.clickSlot(savedAxeSlot, findEmptyHotbarSlot(), 0, net.minecraft.screen.slot.SlotActionType.SWAP);
+            savedAxeSlot = -1;
+        }
+    }
+}

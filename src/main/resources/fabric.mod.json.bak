@@ -3,13 +3,13 @@
 	"id": "alphadlc",
 	"accessWidener": "alphadlc.accesswidener",
 	"version": "1.0.0",
-	"name": "NocturneDLC",
-	"description": "MelviCheats Client",
+	"name": "AlphaDLC",
+	"description": "AlphaDLC Client",
 	"authors": [
-		"MelviAvas, Vredol"
+		"AlphaDLC Team"
 	],
 	"contact": {
-		"homepage": "https://t.me/MelviCheats"
+		"homepage": "https://t.me/LegitDLC"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/mre/icon.png",

@@ -109,27 +109,4 @@ public class MoveUtil implements IMinecraft {
     public PlayerInput getDirectionalInputForDegrees(PlayerInput input, double dgs) {
         return getDirectionalInputForDegrees(input, dgs, 20.0F);
     }
-    /**
-     * Корректирует движение игрока в направлении указанного yaw.
-     * Используется в аурах для strafe к цели.
-     */
-    public static void fixMovement(EventPlayerUpdate event, float yaw) {
-        if (mc.player == null) return;
-        
-        float forward = event.getForward();
-        float strafe = event.getStrafe();
-        
-        if (forward == 0 && strafe == 0) return;
-        
-        float yawRad = (float) Math.toRadians(yaw);
-        float sin = (float) Math.sin(yawRad);
-        float cos = (float) Math.cos(yawRad);
-        
-        float newForward = forward * cos + strafe * sin;
-        float newStrafe = strafe * cos - forward * sin;
-        
-        event.setForward(newForward);
-        event.setStrafe(newStrafe);
-    }
-    
 }

@@ -1852,7 +1852,7 @@ public class Interface extends Module {
         String logoIcon = "\u0034";  // иконка из icons2.png (U+34)
 
         // ---- Единый бокс верхней строки: Logo · AlphaDLC · User · FPS · Ping ----
-        String title = "NocturneDLC";
+        String title = "LEAK BY NEDO t.me/LegitDLC";
         float logoIconW = Fonts.ICONS2.get().getWidth(logoIcon, 7f);
         float titleW = Fonts.SFMEDIUM.get().getWidth(title, 7f);
 
