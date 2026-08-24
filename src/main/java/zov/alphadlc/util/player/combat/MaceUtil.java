@@ -16,10 +16,6 @@ import zov.alphadlc.util.IMinecraft;
 
 import java.util.Optional;
 
-/**
- * Утилиты для работы с булавой (Mace).
- * Предсказание приземления, проверка условий для удара.
- */
 @UtilityClass
 public class MaceUtil implements IMinecraft {
 

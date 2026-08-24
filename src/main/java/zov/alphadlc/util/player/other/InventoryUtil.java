@@ -91,434 +91,371 @@ public class InventoryUtil implements IMinecraft {
         return -1;
     }
 
-    public static int searchItemStack(Predicate<ItemStack> predicate) {
-        for (var i = 0; i < 45; i++) {
-            var stack = mc.player.getInventory().getStack(i);
-            if (!stack.isEmpty() && predicate.test(stack)) {
-                return i;
-            }
+    public static boolean isArmorBetter(ItemStack current, ItemStack potential, EquipmentSlot slot) {
+        if (potential.isEmpty()) return false;
+        if (current.isEmpty()) return true;
+        if (!(potential.getItem() instanceof ArmorItem)) return false;
+        if (current.getItem() instanceof ArmorItem currentArmor && potential.getItem() instanceof ArmorItem potentialArmor) {
+            if (currentArmor.getSlotType() != slot || potentialArmor.getSlotType() != slot) return false;
+            int currentProtection = currentArmor.getProtection();
+            int potentialProtection = potentialArmor.getProtection();
+            int currentToughness = (int) currentArmor.getToughness();
+            int potentialToughness = (int) potentialArmor.getToughness();
+            int currentEnchants = EnchantmentHelper.get(current).values().stream().mapToInt(Integer::intValue).sum();
+            int potentialEnchants = EnchantmentHelper.get(potential).values().stream().mapToInt(Integer::intValue).sum();
+            int currentScore = currentProtection + currentToughness + currentEnchants;
+            int potentialScore = potentialProtection + potentialToughness + potentialEnchants;
+            return potentialScore > currentScore;
         }
-        return -1;
+        return false;
     }
 
-    public static int searchHotbarStack(Predicate<ItemStack> predicate) {
-        for (var i = 0; i < 9; i++) {
-            var stack = mc.player.getInventory().getStack(i);
-            if (!stack.isEmpty() && predicate.test(stack)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    public static void swapWithBypassGrim(Runnable runnable) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
-        try {
-            mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(new PlayerInput(false, false, false, false, false, false, false)));
-            if (AlphaDLC.getInstance().getServerManager().isServerSprinting()) {
-                mc.player.setSprinting(false);
-                mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                if (!Instance.get(Sprint.class).isEnabled()) mc.options.sprintKey.setPressed(false);
-            }
-            runnable.run();
-            NetworkUtils.sendSilentPacket(new CloseHandledScreenC2SPacket(0));
-            mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void swapWithBypassPolar(Runnable runnable) {
-        swapWithBypassPolar(runnable, 100);
-    }
-
-    public static void swapWithBypassPolar(Runnable runnable, long duration) {
-        if (mc.player == null || mc.getNetworkHandler() == null) return;
-        try {
-            SlownessManager.addTask(new SlownessManager.SlowTask(duration, () -> {
-                if (mc.player.isUsingItem()) mc.interactionManager.stopUsingItem(mc.player);
-                runnable.run();
-                NetworkUtils.sendSilentPacket(new CloseHandledScreenC2SPacket(0));
-            }));
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void swapAndUseHvH(Item item) {
-        if (mc.player.getItemCooldownManager().isCoolingDown(new ItemStack(item))) return;
-
-        var slot = searchItem(item, 9, 45);
-        var slotHotbar = searchItem(item, 0, 9);
-        var previousSlot = mc.player.getInventory().selectedSlot;
-
-        if (mc.player.getMainHandStack().getItem() == item) {
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-            return;
-        }
-
-        if (mc.player.getOffHandStack().getItem() == item) {
-            mc.interactionManager.interactItem(mc.player, Hand.OFF_HAND);
-            return;
-        }
-
-        if (slotHotbar != -1) {
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slotHotbar));
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-            mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(previousSlot));
-        }
-
-        if (slotHotbar == -1 && slot != -1) {
-            var slotCorrectable = -1;
-            for (var slotNone = 0; slotNone < 8; slotNone++) {
-                var stack = mc.player.getInventory().getStack(slotNone);
-                if (stack.isEmpty()) slotCorrectable = slotNone;
-
-                var action = stack.getUseAction();
-
-                if (action == UseAction.NONE) {
-                    slotCorrectable = slotNone;
-                }
-            }
-            if (slotCorrectable == -1) {
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(new PlayerInput(false, false, false, false, false, false, false)));
-                if (AlphaDLC.getInstance().getServerManager().isServerSprinting()) {
-                    mc.player.setSprinting(false);
-                    mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                    if (!Instance.get(Sprint.class).isEnabled()) mc.options.sprintKey.setPressed(false);
-                }
-                mc.interactionManager.clickSlot(0, slot, 8, SlotActionType.SWAP, mc.player);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(0));
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(8));
-                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(previousSlot));
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
-            } else {
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(new PlayerInput(false, false, false, false, false, false, false)));
-                if (AlphaDLC.getInstance().getServerManager().isServerSprinting()) {
-                    mc.player.setSprinting(false);
-                    mc.getNetworkHandler().sendPacket(new ClientCommandC2SPacket(mc.player, ClientCommandC2SPacket.Mode.STOP_SPRINTING));
-                    if (!Instance.get(Sprint.class).isEnabled()) mc.options.sprintKey.setPressed(false);
-                }
-                mc.interactionManager.clickSlot(0, slot, slotCorrectable, SlotActionType.SWAP, mc.player);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(0));
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(slotCorrectable));
-                mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-                mc.getNetworkHandler().sendPacket(new UpdateSelectedSlotC2SPacket(previousSlot));
-                mc.interactionManager.clickSlot(0, slot, slotCorrectable, SlotActionType.SWAP, mc.player);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(0));
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
-            }
-        }
-    }
-
-    public static void swapAndUseLegit(Item item) {
-        if (mc.player == null || mc.world == null) return;
-        if (mc.player.getItemCooldownManager().isCoolingDown(new ItemStack(item))) return;
-
-        var slot = searchItem(item, 9, 45);
-        var slotHotbar = searchItem(item, 0, 9);
-        var previousSlot = mc.player.getInventory().selectedSlot;
-
-        // Already holding item - just use it
-        if (mc.player.getMainHandStack().getItem() == item) {
-            mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
-            return;
-        }
-
-        // Item in offhand - use it
-        if (mc.player.getOffHandStack().getItem() == item) {
-            mc.interactionManager.interactItem(mc.player, Hand.OFF_HAND);
-            return;
-        }
-
-        // Item in hotbar - swap to it and use
-        if (slotHotbar != -1) {
-            // Change selected slot on client
-            mc.player.getInventory().selectedSlot = slotHotbar;
-            // Sync with server
-            mc.interactionManager.syncSelectedSlot();
-            
-            // Use item with proper sequencing (same tick)
-            mc.interactionManager.sendSequencedPacket(mc.world, (sequence) -> 
-                new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, sequence, mc.player.getYaw(), mc.player.getPitch()));
-            
-            // Restore previous slot (same tick - looks instant but still legit)
-            mc.player.getInventory().selectedSlot = previousSlot;
-            mc.interactionManager.syncSelectedSlot();
-            return;
-        }
-
-        // Item not in hotbar - need to swap from inventory
-        if (slotHotbar == -1 && slot != -1) {
-            // Find empty slot or slot with non-usable item
-            var slotCorrectable = -1;
-            for (var slotNone = 0; slotNone < 9; slotNone++) {
-                var stack = mc.player.getInventory().getStack(slotNone);
-                if (stack.isEmpty()) {
-                    slotCorrectable = slotNone;
-                    break;
-                }
-                var action = stack.getUseAction();
-                if (action == UseAction.NONE) {
-                    slotCorrectable = slotNone;
-                }
-            }
-            
-            if (slotCorrectable != -1) {
-                // Stop input for legit inventory interaction
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(
-                    new PlayerInput(false, false, false, false, false, false, false)));
-                
-                // Swap item to hotbar slot
-                mc.interactionManager.clickSlot(0, slot, slotCorrectable, SlotActionType.SWAP, mc.player);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(0));
-                
-                // Select the slot and sync
-                mc.player.getInventory().selectedSlot = slotCorrectable;
-                mc.interactionManager.syncSelectedSlot();
-                
-                // Use the item
-                mc.interactionManager.sendSequencedPacket(mc.world, (sequence) -> 
-                    new PlayerInteractItemC2SPacket(Hand.MAIN_HAND, sequence, mc.player.getYaw(), mc.player.getPitch()));
-                
-                // Restore slot
-                mc.player.getInventory().selectedSlot = previousSlot;
-                mc.interactionManager.syncSelectedSlot();
-                
-                // Swap item back to inventory
-                mc.interactionManager.clickSlot(0, slot, slotCorrectable, SlotActionType.SWAP, mc.player);
-                mc.getNetworkHandler().sendPacket(new CloseHandledScreenC2SPacket(0));
-                
-                // Restore input
-                mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
-            }
-        }
-    }
-
-    public static void clickSlotNoSync(int syncId, int slotId, int button, SlotActionType actionType, PlayerEntity player) {
-        ScreenHandler screenHandler = player.currentScreenHandler;
-        if (syncId != screenHandler.syncId) {
-            LOGGER.warn("Ignoring click in mismatching container. Click in {}, player has {}.", syncId, screenHandler.syncId);
-        } else {
-            DefaultedList<Slot> defaultedList = screenHandler.slots;
-            int i = defaultedList.size();
-            List<ItemStack> list = Lists.newArrayListWithCapacity(i);
-            Iterator var10 = defaultedList.iterator();
-
-            while (var10.hasNext()) {
-                Slot slot = (Slot) var10.next();
-                list.add(slot.getStack().copy());
-            }
-
-            screenHandler.onSlotClick(slotId, button, actionType, player);
-            Int2ObjectMap<ItemStack> int2ObjectMap = new Int2ObjectOpenHashMap();
-
-            for (int j = 0; j < i; ++j) {
-                ItemStack itemStack = (ItemStack) list.get(j);
-                ItemStack itemStack2 = ((Slot) defaultedList.get(j)).getStack();
-                if (!ItemStack.areEqual(itemStack, itemStack2)) {
-                    int2ObjectMap.put(j, itemStack2.copy());
-                }
-            }
-
-            NetworkUtils.sendSilentPacket(new ClickSlotC2SPacket(syncId, screenHandler.getRevision(), slotId, button, actionType, screenHandler.getCursorStack().copy(), int2ObjectMap));
-        }
-    }
-
-    public static int findBestElytraSlot() {
-        var bestSlot = -1;
-        var bestScore = -1.0;
-
-        RegistryEntry<Enchantment> protection = MinecraftClient.getInstance().world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get().getEntry(Enchantments.PROTECTION.getValue()).orElseThrow();
-        RegistryEntry<Enchantment> unbreaking = MinecraftClient.getInstance().world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get().getEntry(Enchantments.UNBREAKING.getValue()).orElseThrow();
-        RegistryEntry<Enchantment> mending = MinecraftClient.getInstance().world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get().getEntry(Enchantments.MENDING.getValue()).orElseThrow();
-
-        for (int slot = 0; slot < 36; slot++) {
-            ItemStack stack = mc.player.getInventory().getStack(slot);
-            if (stack.isOf(Items.ELYTRA)) {
-                int protLevel = EnchantmentHelper.getLevel(protection, stack);
-                int unbLevel = EnchantmentHelper.getLevel(unbreaking, stack);
-                int mendLevel = EnchantmentHelper.getLevel(mending, stack);
-
-                int maxDurability = stack.getMaxDamage();
-                int currentDamage = stack.getDamage();
-                double durabilityRatio = (maxDurability - currentDamage) / (double) maxDurability;
-
-                double score = protLevel * 100 +
-                        unbLevel * 10 +
-                        (mendLevel > 0 ? 1 : 0) +
-                        durabilityRatio * 10;
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestSlot = slot;
-                }
-            }
-        }
-
-        return bestSlot;
-    }
-
-    public static int findBestChestplateSlot() {
-        var bestSlot = -1;
-        var bestScore = -1.0;
-
-        var protection = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.PROTECTION.getValue()).orElseThrow();
-        var unbreaking = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.UNBREAKING.getValue()).orElseThrow();
-        var mending = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.MENDING.getValue()).orElseThrow();
-
-        for (var slot = 0; slot < 36; slot++) {
-            var stack = mc.player.getInventory().getStack(slot);
-            if (stack.getItem() instanceof ArmorItem armor) {
-                var protLevel = EnchantmentHelper.getLevel(protection, stack);
-                var unbLevel = EnchantmentHelper.getLevel(unbreaking, stack);
-                var mendLevel = EnchantmentHelper.getLevel(mending, stack);
-
-                var armorTypePriority = getChestplatePriority(armor);
-
-                var maxDurability = stack.getMaxDamage();
-                var currentDamage = stack.getDamage();
-                var durabilityRatio = (maxDurability - currentDamage) / (double) maxDurability;
-
-                var score = armorTypePriority * 10000 +
-                        protLevel * 100 +
-                        unbLevel * 10 +
-                        (mendLevel > 0 ? 1 : 0) +
-                        durabilityRatio * 10;
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestSlot = slot;
-                }
-            }
-        }
-
-        return bestSlot;
-    }
-
-    private static int getArmorPriority(Item item) {
-        if (item == Items.NETHERITE_HELMET || item == Items.NETHERITE_CHESTPLATE || item == Items.NETHERITE_LEGGINGS || item == Items.NETHERITE_BOOTS)
-            return 6;
-        if (item == Items.DIAMOND_HELMET || item == Items.DIAMOND_CHESTPLATE || item == Items.DIAMOND_LEGGINGS || item == Items.DIAMOND_BOOTS)
-            return 5;
-        if (item == Items.IRON_HELMET || item == Items.IRON_CHESTPLATE || item == Items.IRON_LEGGINGS || item == Items.IRON_BOOTS)
-            return 4;
-        if (item == Items.CHAINMAIL_HELMET || item == Items.CHAINMAIL_CHESTPLATE || item == Items.CHAINMAIL_LEGGINGS || item == Items.CHAINMAIL_BOOTS)
-            return 3;
-        if (item == Items.GOLDEN_HELMET || item == Items.GOLDEN_CHESTPLATE || item == Items.GOLDEN_LEGGINGS || item == Items.GOLDEN_BOOTS)
-            return 2;
-        if (item == Items.LEATHER_HELMET || item == Items.LEATHER_CHESTPLATE || item == Items.LEATHER_LEGGINGS || item == Items.LEATHER_BOOTS)
-            return 1;
-        return 0;
-    }
-
-    private static int getChestplatePriority(Item item) {
-        if (item == Items.NETHERITE_CHESTPLATE) return 6;
-        if (item == Items.DIAMOND_CHESTPLATE) return 5;
-        if (item == Items.IRON_CHESTPLATE) return 4;
-        if (item == Items.CHAINMAIL_CHESTPLATE) return 3;
-        if (item == Items.GOLDEN_CHESTPLATE) return 2;
-        if (item == Items.LEATHER_CHESTPLATE) return 1;
-        return 0;
-    }
-
-    public static int getBestArmorSlot(EquipmentSlot slot) {
-        int bestSlot = -1;
-        double bestScore = -1;
-
-        for (int i = 0; i < 36; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (!(stack.getItem() instanceof ArmorItem)) continue;
-            if (getNeededArmorSlot(stack) != slot) continue;
-
-            double score = getArmorScore(stack);
-
-            if (score > bestScore) {
-                bestScore = score;
-                bestSlot = i;
-            }
-        }
-
-        return bestSlot;
-    }
-
-    private static EquipmentSlot getNeededArmorSlot(ItemStack stack) {
-        Item item = stack.getItem();
-
-        if (item instanceof ArmorItem) {
-            if (item == Items.NETHERITE_HELMET || item == Items.DIAMOND_HELMET
-                    || item == Items.IRON_HELMET || item == Items.GOLDEN_HELMET
-                    || item == Items.CHAINMAIL_HELMET || item == Items.LEATHER_HELMET)
-                return EquipmentSlot.HEAD;
-
-            if (item == Items.NETHERITE_CHESTPLATE || item == Items.DIAMOND_CHESTPLATE
-                    || item == Items.IRON_CHESTPLATE || item == Items.GOLDEN_CHESTPLATE
-                    || item == Items.CHAINMAIL_CHESTPLATE || item == Items.LEATHER_CHESTPLATE)
-                return EquipmentSlot.CHEST;
-
-            if (item == Items.NETHERITE_LEGGINGS || item == Items.DIAMOND_LEGGINGS
-                    || item == Items.IRON_LEGGINGS || item == Items.GOLDEN_LEGGINGS
-                    || item == Items.CHAINMAIL_LEGGINGS || item == Items.LEATHER_LEGGINGS)
-                return EquipmentSlot.LEGS;
-
-            if (item == Items.NETHERITE_BOOTS || item == Items.DIAMOND_BOOTS
-                    || item == Items.IRON_BOOTS || item == Items.GOLDEN_BOOTS
-                    || item == Items.CHAINMAIL_BOOTS || item == Items.LEATHER_BOOTS)
-                return EquipmentSlot.FEET;
-        }
-
-        return null;
-    }
-
-    public static double getArmorScore(ItemStack stack) {
-        double score = 0;
-        score += getArmorPriority(stack.getItem());
-
-        var protection = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.PROTECTION.getValue()).orElseThrow();
-        var unbreaking = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.UNBREAKING.getValue()).orElseThrow();
-        var mending = mc.world.getRegistryManager()
-                .getOptional(RegistryKeys.ENCHANTMENT).get()
-                .getEntry(Enchantments.MENDING.getValue()).orElseThrow();
-        score += EnchantmentHelper.getLevel(protection, stack) * 0.75;
-        score += EnchantmentHelper.getLevel(unbreaking, stack) * 0.3;
-        score += EnchantmentHelper.getLevel(mending, stack) * 0.1;
-
-        double durabilityFactor = 1.0;
-
-        if (stack.isDamageable()) {
-            int max = stack.getMaxDamage();
-            int left = max - stack.getDamage();
-            durabilityFactor = Math.max(0.05, (double) left / max);
-        }
-
-        return score * durabilityFactor;
-    }
-    /**
-     * Подсчитывает общее количество указанного предмета в инвентаре (включая хотбар).
-     */
     public static int countItem(Item item) {
         int count = 0;
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.isOf(item)) {
+            if (stack.getItem() == item) {
                 count += stack.getCount();
             }
         }
         return count;
     }
-    
+
+    public static boolean isInventoryFull() {
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            if (mc.player.getInventory().getStack(i).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isHotbarFull() {
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static void clickSlot(int slot, int button, SlotActionType actionType) {
+        if (mc.player == null || mc.player.currentScreenHandler == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slot, button, actionType, mc.player);
+    }
+
+    public static void clickSlot(int slot, int button, int actionType, SlotActionType slotActionType) {
+        clickSlot(slot, button, slotActionType);
+    }
+
+    public static void swapSlots(int from, int to) {
+        if (mc.player == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, from, to, SlotActionType.SWAP, mc.player);
+    }
+
+    public static void dropSlot(int slot) {
+        if (mc.player == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slot, 1, SlotActionType.THROW, mc.player);
+    }
+
+    public static void pickupSlot(int slot) {
+        if (mc.player == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slot, 0, SlotActionType.PICKUP, mc.player);
+    }
+
+    public static void quickMove(int slot) {
+        if (mc.player == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slot, 0, SlotActionType.QUICK_MOVE, mc.player);
+    }
+
+    public static void updateInventory() {
+        if (mc.player == null) return;
+        mc.player.getInventory().updateItems();
+    }
+
+    public static void setSlot(int slot) {
+        if (mc.player == null) return;
+        mc.player.getInventory().selectedSlot = slot;
+    }
+
+    public static int getSlot() {
+        if (mc.player == null) return -1;
+        return mc.player.getInventory().selectedSlot;
+    }
+
+    public static ItemStack getStackInSlot(int slot) {
+        if (mc.player == null) return ItemStack.EMPTY;
+        return mc.player.getInventory().getStack(slot);
+    }
+
+    public static boolean isHolding(Item item) {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() == item;
+    }
+
+    public static boolean isHoldingOffhand(Item item) {
+        if (mc.player == null) return false;
+        return mc.player.getOffHandStack().getItem() == item;
+    }
+
+    public static int getEmptySlot() {
+        if (mc.player == null) return -1;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            if (mc.player.getInventory().getStack(i).isEmpty()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static int getEmptyHotbarSlot() {
+        if (mc.player == null) return -1;
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).isEmpty()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static int findItem(Item item) {
+        if (mc.player == null) return -1;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == item) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static int findItemHotbar(Item item) {
+        if (mc.player == null) return -1;
+        for (int i = 0; i < 9; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == item) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public static boolean hasItem(Item item) {
+        return findItem(item) != -1;
+    }
+
+    public static boolean hasItemHotbar(Item item) {
+        return findItemHotbar(item) != -1;
+    }
+
+    public static int getItemCount(Item item) {
+        if (mc.player == null) return 0;
+        int count = 0;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == item) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    public static int getHotbarItemCount(Item item) {
+        if (mc.player == null) return 0;
+        int count = 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() == item) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    public static void throwItem(Item item) {
+        int slot = findItem(item);
+        if (slot != -1) {
+            dropSlot(slot);
+        }
+    }
+
+    public static void throwAllItems(Item item) {
+        if (mc.player == null) return;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            if (mc.player.getInventory().getStack(i).getItem() == item) {
+                dropSlot(i);
+            }
+        }
+    }
+
+    public static void moveToHotbar(int slot, int hotbarSlot) {
+        if (mc.player == null) return;
+        ScreenHandler handler = mc.player.currentScreenHandler;
+        mc.interactionManager.clickSlot(handler.syncId, slot, hotbarSlot, SlotActionType.SWAP, mc.player);
+    }
+
+    public static void equipItem(int slot) {
+        if (mc.player == null) return;
+        ItemStack stack = mc.player.getInventory().getStack(slot);
+        if (stack.getItem() instanceof ArmorItem armor) {
+            mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.QUICK_MOVE, mc.player);
+        }
+    }
+
+    public static int getBestToolSlot(net.minecraft.block.BlockState state) {
+        if (mc.player == null) return -1;
+        int bestSlot = -1;
+        float bestSpeed = 1.0f;
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            float speed = stack.getMiningSpeedMultiplier(state);
+            if (speed > bestSpeed) {
+                bestSpeed = speed;
+                bestSlot = i;
+            }
+        }
+        return bestSlot;
+    }
+
+    public static int getBestWeaponSlot() {
+        if (mc.player == null) return -1;
+        int bestSlot = -1;
+        double bestDamage = 0;
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() instanceof net.minecraft.item.SwordItem sword) {
+                double damage = sword.getMaterial().getAttackDamage() + 4;
+                if (damage > bestDamage) {
+                    bestDamage = damage;
+                    bestSlot = i;
+                }
+            }
+        }
+        return bestSlot;
+    }
+
+    public static int getBestArmorSlot(EquipmentSlot slot) {
+        if (mc.player == null) return -1;
+        int bestSlot = -1;
+        int bestProtection = -1;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() instanceof ArmorItem armor && armor.getSlotType() == slot) {
+                int protection = armor.getProtection();
+                if (protection > bestProtection) {
+                    bestProtection = protection;
+                    bestSlot = i;
+                }
+            }
+        }
+        return bestSlot;
+    }
+
+    public static boolean isStackBetter(ItemStack current, ItemStack potential) {
+        if (potential.isEmpty()) return false;
+        if (current.isEmpty()) return true;
+        return potential.getItem() instanceof ArmorItem && isArmorBetter(current, potential, ((ArmorItem) potential.getItem()).getSlotType());
+    }
+
+    public static void openInventory() {
+        if (mc.player == null) return;
+        mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, 0, 0, SlotActionType.PICKUP, mc.player);
+    }
+
+    public static void closeInventory() {
+        if (mc.player == null) return;
+        mc.player.closeHandledScreen();
+    }
+
+    public static boolean isInventoryOpen() {
+        return mc.player != null && mc.player.currentScreenHandler != mc.player.playerScreenHandler;
+    }
+
+    public static boolean isHoldingFood() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem().getFoodComponent() != null;
+    }
+
+    public static boolean isHoldingPotion() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.PotionItem;
+    }
+
+    public static boolean isHoldingBlock() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.BlockItem;
+    }
+
+    public static boolean isHoldingThrowable() {
+        if (mc.player == null) return false;
+        Item item = mc.player.getMainHandStack().getItem();
+        return item == Items.ENDER_PEARL || item == Items.SNOWBALL || item == Items.EGG;
+    }
+
+    public static boolean isHoldingBow() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.BOW);
+    }
+
+    public static boolean isHoldingCrossbow() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.CROSSBOW);
+    }
+
+    public static boolean isHoldingTrident() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.TRIDENT);
+    }
+
+    public static boolean isHoldingShield() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.SHIELD) || mc.player.getOffHandStack().isOf(Items.SHIELD);
+    }
+
+    public static boolean isHoldingTotem() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.TOTEM_OF_UNDYING) || mc.player.getOffHandStack().isOf(Items.TOTEM_OF_UNDYING);
+    }
+
+    public static boolean isHoldingGap() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.ENCHANTED_GOLDEN_APPLE) || mc.player.getMainHandStack().isOf(Items.GOLDEN_APPLE);
+    }
+
+    public static boolean isHoldingCrystal() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.END_CRYSTAL);
+    }
+
+    public static boolean isHoldingObsidian() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().isOf(Items.OBSIDIAN);
+    }
+
+    public static boolean isHoldingBed() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.BedItem;
+    }
+
+    public static boolean isHoldingPickaxe() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.PickaxeItem;
+    }
+
+    public static boolean isHoldingAxe() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.AxeItem;
+    }
+
+    public static boolean isHoldingSword() {
+        if (mc.player == null) return false;
+        return mc.player.getMainHandStack().getItem() instanceof net.minecraft.item.SwordItem;
+    }
+
+    public static boolean isHoldingTool() {
+        return isHoldingPickaxe() || isHoldingAxe() || isHoldingSword();
+    }
 }

@@ -21,7 +21,7 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import zov.alphadlc.util.friend.FriendRepository;
-import zov.alphadlc.event.list.EventPlayerUpdate;
+import zov.alphadlc.event.list.MoveInputEvent;
 import zov.alphadlc.event.list.EventTick;
 import zov.alphadlc.module.Module;
 import zov.alphadlc.module.ModuleCategory;
@@ -114,7 +114,7 @@ public class AttackAura extends Module {
     }
 
     @Subscribe
-    public void onPlayerUpdate(EventPlayerUpdate event) {
+    public void onMoveInput(MoveInputEvent event) {
         if (target != null && smartSprint.getValue()) {
             float yawToTarget = (float) MathHelper.wrapDegrees(
                 Math.toDegrees(Math.atan2(target.getZ() - mc.player.getZ(),
@@ -122,13 +122,14 @@ public class AttackAura extends Module {
             MoveUtil.fixMovement(event, yawToTarget);
         }
     }
+
     // === Target Finding ===
 
     private Optional<LivingEntity> findTarget() {
         if (mc.world == null || mc.player == null) return Optional.empty();
 
         double reach = attackRange.getValue();
-        float fovVal = fov.getValue();
+        float fovVal = (float) fov.getValue();
 
         return StreamSupport.stream(mc.world.getEntities().spliterator(), false)
             .filter(LivingEntity.class::isInstance)
@@ -176,6 +177,7 @@ public class AttackAura extends Module {
         double angle = Math.toDegrees(Math.acos(MathHelper.clamp(look.dotProduct(toEntity), -1.0, 1.0)));
         return angle <= maxFov / 2.0f;
     }
+
     // === Attack Logic ===
 
     private void performAttack() {
@@ -211,7 +213,7 @@ public class AttackAura extends Module {
         if (axeInv != -1 && blockHitDelay <= 0) {
             int emptySlot = findEmptyHotbarSlot();
             if (emptySlot != -1) {
-                InventoryUtil.clickSlot(axeInv, emptySlot, 0, net.minecraft.screen.slot.SlotActionType.SWAP);
+                InventoryUtil.swapSlots(axeInv, emptySlot);
                 blockHitDelay = 5;
                 return;
             }
@@ -259,71 +261,42 @@ public class AttackAura extends Module {
         if (target == null || mc.player == null) return false;
 
         if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
-            attackRange.getValue(), target, wallCheck.getValue())) {
+            attackRange.getValue(), target, hitThroughWalls.getValue())) {
             return false;
         }
 
-        if (autoMace.getValue() && MaceUtil.isHoldingMace()) {
-            return mc.player.getItemCooldownManager().isCoolingDown(mc.player.getMainHandStack())
-                && attackCooldown >= 3;
+        if (onlyCrits.getValue() && !AuraUtil.isCritPossible()) {
+            return false;
         }
 
         return mc.player.getAttackCooldownProgress(0.5f) >= 0.9f && attackCooldown >= 10;
     }
 
     private boolean shouldAttackNormal() {
-        if (!onlyCrits.getValue()) return true;
-        return AuraUtil.isFallingForCrit()
-            || (AuraUtil.canCrit() && !mc.player.isOnGround());
+        if (autoMace.getValue() && MaceUtil.isHoldingMace()) {
+            return mc.player.fallDistance > 1.5f || MaceUtil.willLandSoon();
+        }
+        return true;
     }
 
     private boolean shouldUseMace() {
-        if (!MaceUtil.isHoldingMace()) {
-            int slot = MaceUtil.findMaceSlot();
-            if (slot != -1) {
-                if (prevSlot == -1) prevSlot = mc.player.getInventory().selectedSlot;
-                mc.player.getInventory().selectedSlot = slot;
+        return mc.player.fallDistance > 1.0f || MaceUtil.willLandSoon() || mc.player.getVelocity().y < -0.5;
+    }
+
+    private int findAxe(int start, int end) {
+        for (int i = start; i < end; i++) {
+            if (mc.player.getInventory().getStack(i).getItem() instanceof AxeItem) {
+                return i;
             }
-        }
-        return MaceUtil.isHoldingMace();
-    }
-
-    // === Rotation ===
-
-    private void rotateToTarget() {
-        if (target == null) return;
-
-        Vec3d eye = mc.player.getEyePos();
-        Vec3d aimDelta = AuraUtil.findAimPoint(eye, target, attackRange.getValue(), wallCheck.getValue());
-
-        if (aimDelta.equals(Vec3d.ZERO)) {
-            aimDelta = target.getBoundingBox().getCenter().subtract(eye);
-        }
-
-        float yaw = (float) MathHelper.wrapDegrees(
-            Math.toDegrees(Math.atan2(aimDelta.z, aimDelta.x)) - 90.0);
-        float pitch = (float) (-Math.toDegrees(
-            Math.atan2(aimDelta.y, Math.hypot(aimDelta.x, aimDelta.z))));
-
-        switch (rotationMode.getValue()) {
-            case "Instant" -> RotationComponent.update(new Rotation(yaw, pitch), 180f, 180f, 180f, 180f, 0, 0, true);
-            case "Smooth" -> RotationComponent.update(new Rotation(yaw, pitch), 45f, 45f, 45f, 45f, 3, 1, true);
-            case "Silent" -> RotationComponent.update(new Rotation(yaw, pitch), 180f, 180f, 180f, 180f, 0, 0, false);
-        }
-    }
-
-    // === Inventory Helpers ===
-
-    private int findAxe(int from, int to) {
-        for (int i = from; i < to; i++) {
-            if (mc.player.getInventory().getStack(i).getItem() instanceof AxeItem) return i;
         }
         return -1;
     }
 
     private int findEmptyHotbarSlot() {
         for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) return i;
+            if (mc.player.getInventory().getStack(i).isEmpty()) {
+                return i;
+            }
         }
         return -1;
     }
@@ -332,6 +305,33 @@ public class AttackAura extends Module {
         if (prevSlot != -1) {
             mc.player.getInventory().selectedSlot = prevSlot;
             prevSlot = -1;
+        }
+    }
+
+    private void rotateToTarget() {
+        if (target == null) return;
+
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d targetPos = target.getPos().add(0, target.getHeight() * 0.5, 0);
+
+        double dx = targetPos.x - eye.x;
+        double dy = targetPos.y - eye.y;
+        double dz = targetPos.z - eye.z;
+
+        double distanceXZ = Math.sqrt(dx * dx + dz * dz);
+        float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
+        float targetPitch = (float) -Math.toDegrees(Math.atan2(dy, distanceXZ));
+
+        String mode = rotationMode.getValue();
+        if (mode.equals("Instant")) {
+            mc.player.setYaw(targetYaw);
+            mc.player.setPitch(MathHelper.clamp(targetPitch, -90f, 90f));
+        } else if (mode.equals("Smooth")) {
+            float[] smoothed = AuraUtil.smoothRotate(mc.player.getYaw(), mc.player.getPitch(), targetYaw, targetPitch, 30f);
+            mc.player.setYaw(smoothed[0]);
+            mc.player.setPitch(MathHelper.clamp(smoothed[1], -90f, 90f));
+        } else if (mode.equals("Silent")) {
+            RotationComponent.update(new Rotation(targetYaw, MathHelper.clamp(targetPitch, -90f, 90f)), 45f, 45f, 30, 1);
         }
     }
 }

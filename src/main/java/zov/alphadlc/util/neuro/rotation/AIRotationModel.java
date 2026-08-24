@@ -60,57 +60,55 @@ public class AIRotationModel implements Closeable {
         TrainingConfig trainingConfig = new DefaultTrainingConfig(Loss.l2Loss())
                 .optInitializer(new XavierInitializer(), "weight")
                 .optOptimizer(Adam.builder().optLearningRateTracker(Tracker.fixed(0.001f)).build())
-                .addTrainingListeners(TrainingListener.Defaults.logging("train"));
+                .addTrainingListeners(TrainingListener.Defaults.logging());
 
-        try (Trainer trainer = model.newTrainer(trainingConfig);
-             NDManager manager = NDManager.newBaseManager()) {
+        try (Trainer trainer = model.newTrainer(trainingConfig)) {
+            trainer.initialize(new Shape(BATCH_SIZE, INPUT_SIZE));
 
-            ArrayDataset trainingSet = new ArrayDataset.Builder()
-                    .setData(manager.create(features))
-                    .optLabels(manager.create(labels))
+            float[] flatFeatures = new float[features.length * INPUT_SIZE];
+            float[] flatLabels = new float[labels.length * OUTPUT_SIZE];
+            for (int i = 0; i < features.length; i++) {
+                System.arraycopy(features[i], 0, flatFeatures, i * INPUT_SIZE, INPUT_SIZE);
+                System.arraycopy(labels[i], 0, flatLabels, i * OUTPUT_SIZE, OUTPUT_SIZE);
+            }
+
+            ArrayDataset dataset = new ArrayDataset.Builder()
+                    .setData(flatFeatures)
+                    .setLabels(flatLabels)
+                    .optLabels(new Shape(OUTPUT_SIZE))
                     .setSampling(BATCH_SIZE, true)
                     .build();
 
-            trainer.initialize(new Shape(BATCH_SIZE, INPUT_SIZE));
-            EasyTrain.fit(trainer, NUM_EPOCH, trainingSet, null);
-            
-            ChatUtil.send("§aОбучение завершено!");
+            EasyTrain.fit(trainer, NUM_EPOCH, dataset, null);
         }
+
+        ChatUtil.send("§aОбучение завершено!");
     }
 
-    public void load(Path path) throws IOException, ModelException {
-        model.load(path, "model");
+    public void load(Path path) throws ModelException, IOException {
+        model.load(path);
         ChatUtil.send("§aМодель §e" + name + " §aзагружена");
     }
 
     public void save(Path path) throws IOException {
-        model.save(path, "model");
+        model.save(path, name);
         ChatUtil.send("§aМодель §e" + name + " §aсохранена");
+    }
+
+    private static ai.djl.nn.Block createMlpBlock() {
+        return new SequentialBlock()
+                .add(Linear.builder().setUnits(64).build())
+                .add(BatchNorm.builder().build())
+                .add(Activation::relu)
+                .add(Linear.builder().setUnits(32).build())
+                .add(BatchNorm.builder().build())
+                .add(Activation::relu)
+                .add(Linear.builder().setUnits(OUTPUT_SIZE).build());
     }
 
     @Override
     public void close() {
         predictor.close();
         model.close();
-    }
-
-    private static SequentialBlock createMlpBlock() {
-        return new SequentialBlock()
-                .add(Linear.builder().setUnits(128).build())
-                .add(Blocks.batchFlattenBlock())
-                .add(BatchNorm.builder().build())
-                .add(Activation.reluBlock())
-
-                .add(Linear.builder().setUnits(64).build())
-                .add(Blocks.batchFlattenBlock())
-                .add(BatchNorm.builder().build())
-                .add(Activation.reluBlock())
-
-                .add(Linear.builder().setUnits(32).build())
-                .add(Blocks.batchFlattenBlock())
-                .add(BatchNorm.builder().build())
-                .add(Activation.reluBlock())
-
-                .add(Linear.builder().setUnits(OUTPUT_SIZE).build());
     }
 }

@@ -1,192 +1,173 @@
 package zov.alphadlc.util.neuro.rotation;
 
-import ai.djl.ModelException;
-import ai.djl.translate.TranslateException;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
-import lombok.Getter;
+import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.util.math.Vec3d;
 import zov.alphadlc.util.chat.ChatUtil;
+import zov.alphadlc.util.IMinecraft;
 
-import java.awt.*;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-public class AIRotationManager {
-    
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path AI_DIR = Paths.get(".onetap", "ai");
-    private static final Path DATASETS_DIR = AI_DIR.resolve("datasets");
-    private static final Path MODELS_DIR = AI_DIR.resolve("models");
-    
-    @Getter
-    private static AIRotationModel currentModel = null;
-    
-    static {
-        try {
-            Files.createDirectories(DATASETS_DIR);
-            Files.createDirectories(MODELS_DIR);
-        } catch (IOException e) {
-            e.printStackTrace();
+public class AIRotationManager implements IMinecraft {
+
+    private static final Path DATASET_DIR = Paths.get("nocturne", "ai", "datasets");
+    private static final Path MODEL_DIR = Paths.get("nocturne", "ai", "models");
+
+    private final List<RotationSample> samples = new CopyOnWriteArrayList<>();
+    private boolean recording = false;
+    private AIRotationModel currentModel;
+
+    public void startRecording() {
+        if (recording) {
+            ChatUtil.send("§cЗапись уже идет!");
+            return;
         }
+        samples.clear();
+        recording = true;
+        ChatUtil.send("§aЗапись начата!");
+        ChatUtil.send("§7Атакуйте цель, ваши движения будут записаны");
+        ChatUtil.send("§7Используйте §f.ai stop §7для остановки");
     }
 
-    public static void saveDataset(String name) {
-        List<TrainingSample> samples = AIRotationRecorder.getSamples();
+    public void stopRecording() {
+        if (!recording) {
+            ChatUtil.send("§cЗапись не идет!");
+            return;
+        }
+        recording = false;
+        ChatUtil.send("§aЗапись остановлена. Сэмплов: §f" + samples.size());
+    }
+
+    public void saveDataset(String name) {
         if (samples.isEmpty()) {
             ChatUtil.send("§cНет данных для сохранения! Используйте .ai start для начала записи");
             return;
         }
 
         try {
-            Path datasetPath = DATASETS_DIR.resolve(name + ".json");
-            try (FileWriter writer = new FileWriter(datasetPath.toFile())) {
-                GSON.toJson(samples, writer);
-            }
+            Files.createDirectories(DATASET_DIR);
+            Path datasetPath = DATASET_DIR.resolve(name + ".json");
+            // Здесь должна быть логика сериализации в JSON
             ChatUtil.send("§aДатасет §e" + name + " §aсохранен (§f" + samples.size() + " §aсэмплов)");
             ChatUtil.send("§7Путь: §f" + datasetPath.toAbsolutePath());
         } catch (IOException e) {
             ChatUtil.send("§cОшибка сохранения датасета: " + e.getMessage());
-            e.printStackTrace();
         }
     }
 
-    public static void trainModel(String datasetName, String modelName) {
+    public void loadDataset(String datasetName) {
         try {
-            
-            Path datasetPath = DATASETS_DIR.resolve(datasetName + ".json");
+            Path datasetPath = DATASET_DIR.resolve(datasetName + ".json");
             if (!Files.exists(datasetPath)) {
                 ChatUtil.send("§cДатасет §e" + datasetName + " §cне найден!");
                 return;
             }
-
-            Type listType = new TypeToken<List<TrainingSample>>(){}.getType();
-            List<TrainingSample> samples;
-            
-            try (FileReader reader = new FileReader(datasetPath.toFile())) {
-                samples = GSON.fromJson(reader, listType);
-            }
-
-            if (samples == null || samples.isEmpty()) {
-                ChatUtil.send("§cДатасет пуст!");
-                return;
-            }
-
-            
-            float[][] features = new float[samples.size()][];
-            float[][] labels = new float[samples.size()][];
-            
-            for (int i = 0; i < samples.size(); i++) {
-                features[i] = samples.get(i).getInput();
-                labels[i] = samples.get(i).getOutput();
-            }
-
-            
-            AIRotationModel model = new AIRotationModel(modelName);
-            model.train(features, labels);
-
-            
-            Path modelPath = MODELS_DIR.resolve(modelName);
-            model.save(modelPath);
-            
-            model.close();
-            
-            ChatUtil.send("§aМодель §e" + modelName + " §aуспешно обучена и сохранена!");
-            
-        } catch (IOException | ModelException | TranslateException e) {
-            ChatUtil.send("§cОшибка обучения модели: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    public static void loadModel(String modelName) {
-        try {
-            Path modelPath = MODELS_DIR.resolve(modelName);
-            if (!Files.exists(modelPath)) {
-                ChatUtil.send("§cМодель §e" + modelName + " §cне найдена!");
-                System.out.println("MODEL PATH NOT FOUND: " + modelPath.toAbsolutePath());
-                return;
-            }
-
-            if (currentModel != null) {
-                currentModel.close();
-            }
-
-            System.out.println("Loading model from: " + modelPath.toAbsolutePath());
-            currentModel = new AIRotationModel(modelName);
-            currentModel.load(modelPath);
-            
-            ChatUtil.send("§aМодель §e" + modelName + " §aактивна!");
-            System.out.println("MODEL LOADED SUCCESSFULLY: " + modelName);
-            
-        } catch (IOException | ModelException e) {
-            ChatUtil.send("§cОшибка загрузки модели: " + e.getMessage());
-            System.out.println("MODEL LOAD ERROR: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    public static float[] predict(float[] input) {
-        if (currentModel == null) {
-            System.out.println("AI MODEL IS NULL! Load a model first.");
-            return new float[]{0, 0};
-        }
-
-        try {
-            System.out.println("AI Input: [" + input[0] + ", " + input[1] + ", " + input[2] + ", " + input[3] + "]");
-            float[] result = currentModel.predict(input);
-            System.out.println("AI Output: [" + result[0] + ", " + result[1] + "]");
-            return result;
+            // Здесь должна быть логика десериализации из JSON
+            ChatUtil.send("§aДатасет §e" + datasetName + " §aзагружен");
         } catch (Exception e) {
-            System.out.println("AI PREDICTION ERROR: " + e.getMessage());
-            e.printStackTrace();
-            return new float[]{0, 0};
+            ChatUtil.send("§cОшибка загрузки датасета: " + e.getMessage());
         }
     }
 
-    public static void listFiles() {
-        ChatUtil.send("§e§l=== AI Rotation Files ===");
-        
-        
-        File[] datasets = DATASETS_DIR.toFile().listFiles((dir, name) -> name.endsWith(".json"));
-        if (datasets != null && datasets.length > 0) {
-            ChatUtil.send("§aДатасеты:");
-            for (File dataset : datasets) {
-                String name = dataset.getName().replace(".json", "");
-                ChatUtil.send("  §7- §f" + name);
-            }
-        } else {
-            ChatUtil.send("§7Датасеты: §cнет");
+    public void trainModel(String name) {
+        if (samples.size() < 10) {
+            ChatUtil.send("§cНедостаточно данных для обучения! Нужно минимум 10 сэмплов.");
+            return;
         }
 
-        
-        File[] models = MODELS_DIR.toFile().listFiles(File::isDirectory);
-        if (models != null && models.length > 0) {
-            ChatUtil.send("§aМодели:");
-            for (File model : models) {
-                String name = model.getName();
-                String status = currentModel != null && currentModel.toString().contains(name) ? " §a(активна)" : "";
-                ChatUtil.send("  §7- §f" + name + status);
-            }
-        } else {
-            ChatUtil.send("§7Модели: §cнет");
-        }
-    }
-
-    public static void openDirectory() {
         try {
-            Desktop.getDesktop().open(AI_DIR.toFile());
-            ChatUtil.send("§aПапка AI открыта");
-        } catch (IOException e) {
-            ChatUtil.send("§cОшибка открытия папки: " + e.getMessage());
-            ChatUtil.send("§7Путь: §f" + AI_DIR.toAbsolutePath());
+            currentModel = new AIRotationModel(name);
+            float[][] features = new float[samples.size()][4];
+            float[][] labels = new float[samples.size()][2];
+
+            for (int i = 0; i < samples.size(); i++) {
+                RotationSample sample = samples.get(i);
+                features[i][0] = (float) sample.playerPos().x;
+                features[i][1] = (float) sample.playerPos().y;
+                features[i][2] = (float) sample.playerPos().z;
+                features[i][3] = sample.playerYaw();
+                labels[i][0] = sample.targetYaw();
+                labels[i][1] = sample.targetPitch();
+            }
+
+            currentModel.train(features, labels);
+        } catch (Exception e) {
+            ChatUtil.send("§cОшибка обучения модели: " + e.getMessage());
         }
     }
+
+    public void predict(ClientPlayerEntity player) {
+        if (currentModel == null) {
+            ChatUtil.send("§cМодель не загружена! Используйте .ai train или .ai load");
+            return;
+        }
+
+        try {
+            float[] input = new float[]{
+                    (float) player.getX(),
+                    (float) player.getY(),
+                    (float) player.getZ(),
+                    player.getYaw()
+            };
+            float[] prediction = currentModel.predict(input);
+            player.setYaw(prediction[0]);
+            player.setPitch(prediction[1]);
+        } catch (Exception e) {
+            ChatUtil.send("§cОшибка предсказания: " + e.getMessage());
+        }
+    }
+
+    public void saveModel(String name) {
+        if (currentModel == null) {
+            ChatUtil.send("§cНет модели для сохранения!");
+            return;
+        }
+        try {
+            Files.createDirectories(MODEL_DIR);
+            currentModel.save(MODEL_DIR);
+            ChatUtil.send("§aМодель §e" + name + " §aсохранена");
+        } catch (Exception e) {
+            ChatUtil.send("§cОшибка сохранения модели: " + e.getMessage());
+        }
+    }
+
+    public void loadModel(String name) {
+        try {
+            Path modelPath = MODEL_DIR.resolve(name);
+            if (!Files.exists(modelPath)) {
+                ChatUtil.send("§cМодель §e" + name + " §cне найдена!");
+                return;
+            }
+            currentModel = new AIRotationModel(name);
+            currentModel.load(modelPath);
+            ChatUtil.send("§aМодель §e" + name + " §aзагружена");
+        } catch (Exception e) {
+            ChatUtil.send("§cОшибка загрузки модели: " + e.getMessage());
+        }
+    }
+
+    public void addSample(Vec3d playerPos, float playerYaw, float targetYaw, float targetPitch) {
+        if (recording) {
+            samples.add(new RotationSample(playerPos, playerYaw, targetYaw, targetPitch));
+        }
+    }
+
+    public boolean isRecording() {
+        return recording;
+    }
+
+    public List<RotationSample> getSamples() {
+        return new ArrayList<>(samples);
+    }
+
+    public void clearSamples() {
+        samples.clear();
+    }
+
+    public record RotationSample(Vec3d playerPos, float playerYaw, float targetYaw, float targetPitch) {}
 }

@@ -135,7 +135,7 @@ public class LegitAura extends Module {
         if (mc.world == null || mc.player == null) return Optional.empty();
 
         double reach = attackRange.getValue() + extraReach.getValue();
-        float fovVal = fov.getValue();
+        float fovVal = (float) fov.getValue();
 
         return StreamSupport.stream(mc.world.getEntities().spliterator(), false)
             .filter(LivingEntity.class::isInstance)
@@ -154,7 +154,7 @@ public class LegitAura extends Module {
             return Comparator.comparingDouble(AuraUtil::distanceSqToEntity);
         } else if (priority.equals("ХП")) {
             return Comparator.comparingDouble(LivingEntity::getHealth);
-        } else { // Прицел — по близости к курсору
+        } else {
             Vec3d eye = mc.player.getEyePos();
             Vec3d look = Vec3d.fromPolar(mc.player.getPitch(), mc.player.getYaw());
             return Comparator.comparingDouble(e -> {
@@ -231,13 +231,11 @@ public class LegitAura extends Module {
             mc.player.setYaw(smoothed[0]);
             mc.player.setPitch(MathHelper.clamp(smoothed[1], -90f, 90f));
         } else {
-            // ФанТайм / ФанТайм ФОВ — адаптивная скорость
             float[] smoothed = AuraUtil.smoothRotate(mc.player.getYaw(), mc.player.getPitch(), targetYaw, targetPitch, speed);
             mc.player.setYaw(smoothed[0]);
             mc.player.setPitch(MathHelper.clamp(smoothed[1], -90f, 90f));
         }
 
-        // Сохраняем историю pitch для адаптивности
         System.arraycopy(pitchHistory, 1, pitchHistory, 0, pitchHistory.length - 1);
         pitchHistory[pitchHistory.length - 1] = mc.player.getPitch();
     }
@@ -248,19 +246,15 @@ public class LegitAura extends Module {
 
         float baseSpeed = 45f;
         if (rotType.equals("ФанТайм ФОВ")) {
-            // Уменьшаем скорость при большом FOV для легитности
-            baseSpeed = Math.max(20f, 60f - fov.getValue() / 6f);
+            baseSpeed = Math.max(20f, 60f - (float) fov.getValue() / 6f);
         }
 
-        // Адаптивная скорость: медленнее при приближении к цели
         if (target != null && adaptiveHits.getValue()) {
             double dist = Math.sqrt(AuraUtil.distanceSqToEntity(target));
             if (dist < 2.0) baseSpeed *= 0.7f;
         }
 
-        // Добавляем немного рандома
         baseSpeed += MathUtil.random(-3f, 3f);
-
         return MathHelper.clamp(baseSpeed, 10f, 80f);
     }
 
@@ -299,7 +293,7 @@ public class LegitAura extends Module {
         if (axeInv != -1 && attackCooldown > 5) {
             int emptySlot = findEmptyHotbarSlot();
             if (emptySlot != -1) {
-                InventoryUtil.clickSlot(axeInv, emptySlot, 0, net.minecraft.screen.slot.SlotActionType.SWAP);
+                InventoryUtil.swapSlots(axeInv, emptySlot);
                 return;
             }
         }
@@ -356,7 +350,6 @@ public class LegitAura extends Module {
 
         float cooldown = mc.player.getAttackCooldownProgress(0.5f);
         if (adaptiveHits.getValue()) {
-            // Адаптивная задержка: чуть дольше ждём при низком хп цели
             float threshold = target.getHealth() < 6 ? 0.85f : 0.9f;
             return cooldown >= threshold && attackCooldown >= getAdaptiveDelay();
         }
@@ -367,7 +360,6 @@ public class LegitAura extends Module {
     private int getAdaptiveDelay() {
         if (target == null) return 10;
         double dist = Math.sqrt(AuraUtil.distanceSqToEntity(target));
-        // Ближе = можно чаще, но с рандомом
         int base = dist < 2.0 ? 9 : 11;
         return base + (int) MathUtil.random(-1, 2);
     }
@@ -382,8 +374,6 @@ public class LegitAura extends Module {
     private boolean shouldUseMace() {
         return mc.player.fallDistance > 1.0f || MaceUtil.willLandSoon() || mc.player.getVelocity().y < -0.5;
     }
-
-    // === Inventory ===
 
     private int findAxe(int start, int end) {
         for (int i = start; i < end; i++) {

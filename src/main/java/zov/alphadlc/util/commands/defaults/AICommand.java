@@ -1,149 +1,56 @@
 package zov.alphadlc.util.commands.defaults;
 
-import zov.alphadlc.AlphaDLC;
 import zov.alphadlc.util.chat.ChatUtil;
-import zov.alphadlc.util.commands.api.Command;
-import zov.alphadlc.util.commands.api.argument.IArgConsumer;
-import zov.alphadlc.util.commands.api.exception.CommandException;
+import zov.alphadlc.util.commands.Command;
 import zov.alphadlc.util.neuro.rotation.AIRotationManager;
-import zov.alphadlc.util.neuro.rotation.AIRotationRecorder;
-
-import java.util.List;
-import java.util.stream.Stream;
 
 public class AICommand extends Command {
-    
-    private static AIRotationRecorder recorder = null;
-    
+
+    private final AIRotationManager manager = new AIRotationManager();
+
     public AICommand() {
-        super("ai");
+        super("ai", ".ai <start|stop|save|load|train|predict>", "Управление AI ротациями");
     }
 
     @Override
-    public void execute(String label, IArgConsumer args) throws CommandException {
-        if (!args.hasAny()) {
-            printHelp();
+    public void execute(String[] args) {
+        if (args.length < 1) {
+            ChatUtil.send("§cИспользование: §f" + getSyntax());
             return;
         }
 
-        String subcommand = args.getString().toLowerCase();
-
-        switch (subcommand) {
+        switch (args[0].toLowerCase()) {
             case "start" -> {
-                if (AIRotationRecorder.isRecording()) {
-                    ChatUtil.send("§cЗапись уже идет!");
-                    return;
-                }
-                
-                
-                if (recorder == null) {
-                    recorder = new AIRotationRecorder();
-                    AlphaDLC.getInstance().getEventBus().register(recorder);
-                }
-                
-                AIRotationRecorder.startRecording();
-                ChatUtil.send("§aЗапись начата!");
-                ChatUtil.send("§7Атакуйте цель, ваши движения будут записаны");
-                ChatUtil.send("§7Используйте §f.ai stop §7для остановки");
+                manager.startRecording();
             }
-
             case "stop" -> {
-                if (!AIRotationRecorder.isRecording()) {
-                    ChatUtil.send("§cЗапись не идет!");
-                    return;
-                }
-                
-                int samples = AIRotationRecorder.stopRecording();
-                ChatUtil.send("§aЗапись остановлена!");
-                ChatUtil.send("§7Записано сэмплов: §f" + samples);
-                ChatUtil.send("§7Используйте §f.ai save <name> §7для сохранения");
+                manager.stopRecording();
             }
-
             case "save" -> {
-                if (!args.hasAny()) {
-                    ChatUtil.send("§cИспользование: §f.ai save <name>");
+                if (args.length < 2) {
+                    ChatUtil.send("§cУкажите имя датасета: §f.ai save <name>");
                     return;
                 }
-                String name = args.getString();
-                AIRotationManager.saveDataset(name);
+                manager.saveDataset(args[1]);
             }
-
             case "load" -> {
-                if (!args.hasAny()) {
-                    ChatUtil.send("§cИспользование: §f.ai load <modelname>");
+                if (args.length < 2) {
+                    ChatUtil.send("§cУкажите имя датасета: §f.ai load <name>");
                     return;
                 }
-                String modelName = args.getString();
-                AIRotationManager.loadModel(modelName);
+                manager.loadDataset(args[1]);
             }
-
             case "train" -> {
-                if (!args.has(2)) {
-                    ChatUtil.send("§cИспользование: §f.ai train <dataset> <modelname>");
+                if (args.length < 2) {
+                    ChatUtil.send("§cУкажите имя модели: §f.ai train <name>");
                     return;
                 }
-                String datasetName = args.getString();
-                String modelName = args.getString();
-                
-                ChatUtil.send("§7Начинаю обучение...");
-                
-                new Thread(() -> {
-                    AIRotationManager.trainModel(datasetName, modelName);
-                }).start();
+                manager.trainModel(args[1]);
             }
-
-            case "list" -> {
-                AIRotationManager.listFiles();
+            case "predict" -> {
+                manager.predict(mc.player);
             }
-
-            case "dir" -> {
-                AIRotationManager.openDirectory();
-            }
-
-            default -> {
-                ChatUtil.send("§cНеизвестная подкоманда: §f" + subcommand);
-                printHelp();
-            }
+            default -> ChatUtil.send("§cНеизвестная команда. Использование: §f" + getSyntax());
         }
-    }
-
-    private void printHelp() {
-        ChatUtil.send("§e§l=== AI Rotation Commands ===");
-        ChatUtil.send("§f.ai start §7- Начать запись движений");
-        ChatUtil.send("§f.ai stop §7- Остановить запись");
-        ChatUtil.send("§f.ai save <name> §7- Сохранить датасет");
-        ChatUtil.send("§f.ai train <dataset> <model> §7- Обучить модель");
-        ChatUtil.send("§f.ai load <model> §7- Загрузить модель");
-        ChatUtil.send("§f.ai list §7- Список файлов");
-        ChatUtil.send("§f.ai dir §7- Открыть папку");
-    }
-
-    @Override
-    public String getShortDesc() {
-        return "Управление AI ротациями";
-    }
-
-    @Override
-    public List<String> getLongDesc() {
-        return List.of(
-                "Команда для записи, обучения и использования AI моделей ротаций",
-                "",
-                "Использование:",
-                ".ai start - начать запись",
-                ".ai stop - остановить запись",
-                ".ai save <name> - сохранить датасет",
-                ".ai train <dataset> <model> - обучить модель",
-                ".ai load <model> - загрузить модель",
-                ".ai list - список файлов",
-                ".ai dir - открыть папку"
-        );
-    }
-
-    @Override
-    public Stream<String> tabComplete(String label, IArgConsumer args) {
-        if (args.hasExactlyOne()) {
-            return Stream.of("start", "stop", "save", "load", "train", "list", "dir");
-        }
-        return Stream.empty();
     }
 }

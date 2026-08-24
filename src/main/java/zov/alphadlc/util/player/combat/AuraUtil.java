@@ -74,7 +74,7 @@ public class AuraUtil implements IMinecraft {
         return mc.player.isOnGround() && !mc.player.isSprinting() && !mc.player.isTouchingWater()
             && !mc.player.isInLava() && !mc.player.hasStatusEffect(StatusEffects.BLINDNESS)
             && mc.player.getVehicle() == null && !mc.player.isClimbing()
-            && !mc.player.isFlying();
+            && !mc.player.getAbilities().flying;
     }
 
     public static boolean shouldWaitForCrit() {
@@ -107,7 +107,7 @@ public class AuraUtil implements IMinecraft {
             .filter(p -> p.squaredDistanceTo(eye) <= reach * reach)
             .min(Comparator.comparingDouble(p -> {
                 Vec3d toP = p.subtract(eye).normalize();
-                return -look.dotProduct(toP); // минимум угла = максимум dot product
+                return -look.dotProduct(toP);
             }));
     }
 
@@ -122,7 +122,6 @@ public class AuraUtil implements IMinecraft {
         float newYaw = currentYaw + yawDiff * factor;
         float newPitch = currentPitch + pitchDiff * factor;
 
-        // GCD fix
         newYaw = currentYaw + GCDFixer.getFixRotate(MathHelper.wrapDegrees(newYaw - currentYaw));
         newPitch = currentPitch + GCDFixer.getFixRotate(newPitch - currentPitch);
         newPitch = MathHelper.clamp(newPitch, -90f, 90f);
@@ -149,5 +148,14 @@ public class AuraUtil implements IMinecraft {
             }
         }
         return false;
+    }
+
+    public static boolean isFallingForCrit() {
+        if (mc.player == null) return false;
+        return mc.player.fallDistance > 0.5f;
+    }
+
+    public static boolean canCrit() {
+        return isCritPossible();
     }
 }

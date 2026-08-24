@@ -1,121 +1,86 @@
 package zov.alphadlc.util.party.connection;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import lombok.Getter;
 import net.minecraft.util.Formatting;
-import zov.alphadlc.util.IMinecraft;
 import zov.alphadlc.util.chat.ChatUtil;
-import zov.alphadlc.util.party.PartyPlayerPos;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Consumer;
+import java.io.*;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 
-public final class PartyApiClient implements IMinecraft {
+public class PartyApiClient {
 
-    private static final HttpClient HTTP = HttpClient.newHttpClient();
-    private static final String BASE_URL =
-            "http://bybybybyvich.pythonanywhere.com";
+    private static final String API_BASE = "http://localhost:8080/api/party";
 
-    private static final ExecutorService PARTY_EXECUTOR =
-            Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "Party-API-Thread");
-                t.setDaemon(true);
-                return t;
-            });
-
-    public static void postAsync(String path, JsonObject body, Consumer<JsonObject> callback) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + path))
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
-                .header("Content-Type", "application/json")
-                .build();
-
-        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenApplyAsync(HttpResponse::body, PARTY_EXECUTOR)
-                .thenAcceptAsync(text -> {
-                    try {
-                        if (!text.startsWith("{")) return;
-                        JsonObject json = JsonParser.parseString(text).getAsJsonObject();
-
-                        mc.execute(() -> callback.accept(json));
-
-                    } catch (Exception ignored) {}
-                }, PARTY_EXECUTOR)
-                .exceptionally(e -> {
-                    e.printStackTrace();
-                    return null;
-                });
+    public String createParty(String leader) {
+        return post("/create", "leader=" + leader);
     }
 
-    @Getter
-    private static volatile List<PartyPlayerPos> cached = List.of();
-
-    public static void fetchPartyStateAsync() {
-        if (mc.player == null) return;
-
-        JsonObject req = new JsonObject();
-        req.addProperty("player", mc.player.getNameForScoreboard());
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(BASE_URL + "/party/state"))
-                .POST(HttpRequest.BodyPublishers.ofString(req.toString()))
-                .header("Content-Type", "application/json")
-                .build();
-
-        HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-                .thenAcceptAsync(response -> {
-                    try {
-                        if (response.statusCode() != 200) return;
-
-                        String body = response.body().trim();
-                        if (!body.startsWith("{")) return;
-
-                        JsonObject json = JsonParser.parseString(body).getAsJsonObject();
-                        JsonArray arr = json.getAsJsonArray("members");
-
-                        List<PartyPlayerPos> list = new ArrayList<>();
-                        for (JsonElement e : arr) {
-                            JsonObject o = e.getAsJsonObject();
-                            list.add(new PartyPlayerPos(
-                                    o.get("playerId").getAsString(),
-                                    o.get("x").getAsDouble(),
-                                    o.get("y").getAsDouble(),
-                                    o.get("z").getAsDouble()
-                            ));
-                        }
-
-                        cached = list;
-                    } catch (Exception ignored) {}
-                });
+    public String invitePlayer(String partyId, String player) {
+        return post("/invite", "partyId=" + partyId + "&player=" + player);
     }
 
-    public static void fetchInvitesAsync() {
-        if (mc.player == null) return;
+    public String joinParty(String partyId, String player) {
+        return post("/join", "partyId=" + partyId + "&player=" + player);
+    }
 
-        JsonObject req = new JsonObject();
-        req.addProperty("player", mc.player.getNameForScoreboard());
+    public String leaveParty(String partyId, String player) {
+        return post("/leave", "partyId=" + partyId + "&player=" + player);
+    }
 
-        postAsync("/party/invites", req, json -> {
-            JsonArray arr = json.getAsJsonArray("invites");
-            for (JsonElement e : arr) {
-                String party = e.getAsString();
-                ChatUtil.send(
-                        Formatting.GRAY + "Вас пригласили в пати " +
-                                Formatting.WHITE + party +
-                                Formatting.GRAY + ", напишите " +
-                                Formatting.WHITE + ".party join " + party
-                );
+    public String disbandParty(String partyId) {
+        return post("/disband", "partyId=" + partyId);
+    }
+
+    public String kickPlayer(String partyId, String player) {
+        return post("/kick", "partyId=" + partyId + "&player=" + player);
+    }
+
+    public String getPartyMembers(String partyId) {
+        return get("/members?partyId=" + partyId);
+    }
+
+    private String post(String endpoint, String body) {
+        try {
+            URL url = new URL(API_BASE + endpoint);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(body.getBytes(StandardCharsets.UTF_8));
             }
-        });
+
+            return readResponse(conn);
+        } catch (IOException e) {
+            ChatUtil.send(Formatting.RED + "Ошибка API: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String get(String endpoint) {
+        try {
+            URL url = new URL(API_BASE + endpoint);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            return readResponse(conn);
+        } catch (IOException e) {
+            ChatUtil.send(Formatting.RED + "Ошибка API: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private String readResponse(HttpURLConnection conn) throws IOException {
+        int code = conn.getResponseCode();
+        InputStream stream = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            return response.toString();
+        }
     }
 }
