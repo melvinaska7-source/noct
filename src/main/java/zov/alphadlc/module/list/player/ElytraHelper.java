@@ -1,6 +1,8 @@
 package zov.alphadlc.module.list.player;
 
 import com.google.common.eventbus.Subscribe;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.EquippableComponent;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.ItemStack;
@@ -99,11 +101,10 @@ public class ElytraHelper extends Module {
     private int findChestplate() {
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() instanceof ArmorItem armor) {
-                // 1.21.4: ArmorItem.getSlot() возвращает EquipmentSlot
-                if (armor.getSlot() == EquipmentSlot.CHEST) {
-                    return i;
-                }
+            // 1.21.4: Проверяем слот через EquippableComponent
+            EquippableComponent equippable = stack.get(DataComponentTypes.EQUIPPABLE);
+            if (equippable != null && equippable.slot() == EquipmentSlot.CHEST) {
+                return i;
             }
         }
         return -1;

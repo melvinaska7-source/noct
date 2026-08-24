@@ -13,7 +13,6 @@ public final class DefaultCommands {
     public static List<ICommand> createAll() {
         // PartyCommand и AICommand наследуют Command (не ICommand),
         // поэтому их нельзя добавить в этот список.
-        // Они регистрируются отдельно через свою систему команд.
         List<ICommand> commands = new ArrayList<ICommand>(Arrays.<ICommand>asList(
                 new CfgCommand(),
                 new RotationCommand(),

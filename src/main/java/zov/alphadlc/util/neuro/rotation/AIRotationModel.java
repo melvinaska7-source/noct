@@ -66,7 +66,6 @@ public class AIRotationModel implements Closeable {
             trainer.initialize(new Shape(BATCH_SIZE, INPUT_SIZE));
 
             // 1.21.4 DJL API: setData требует NDArray[], а не float[]
-            // Создаём NDArray через NDManager
             try (NDManager manager = NDManager.newBaseManager()) {
                 var dataArray = manager.create(flatten(features), new Shape(features.length, INPUT_SIZE));
                 var labelsArray = manager.create(flatten(labels), new Shape(labels.length, OUTPUT_SIZE));
@@ -105,7 +104,6 @@ public class AIRotationModel implements Closeable {
                 .add(Linear.builder().setUnits(OUTPUT_SIZE).build());
     }
 
-    // Вспомогательный метод для flatten 2D массива
     private static float[] flatten(float[][] array) {
         float[] result = new float[array.length * array[0].length];
         for (int i = 0; i < array.length; i++) {

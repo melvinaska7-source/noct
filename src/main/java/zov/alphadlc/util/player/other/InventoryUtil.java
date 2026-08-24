@@ -7,6 +7,7 @@ import lombok.Getter;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.AttributeModifiersComponent;
+import net.minecraft.component.type.EquippableComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
@@ -107,29 +108,30 @@ public class InventoryUtil implements IMinecraft {
     }
 
     // === ИСПРАВЛЕННЫЙ МЕТОД: isArmorBetter ===
-    // 1.21.4: ArmorItem.getSlotType() → ArmorItem.getSlot()
+    // 1.21.4: Проверяем слот брони через EquippableComponent вместо ArmorItem.getSlotType()
     public static boolean isArmorBetter(ItemStack current, ItemStack potential, EquipmentSlot slot) {
         if (potential.isEmpty()) return false;
         if (current.isEmpty()) return true;
-        if (!(potential.getItem() instanceof ArmorItem)) return false;
-        if (current.getItem() instanceof ArmorItem currentArmor && potential.getItem() instanceof ArmorItem potentialArmor) {
-            // 1.21.4: getSlot() вместо getSlotType()
-            if (currentArmor.getSlot() != slot || potentialArmor.getSlot() != slot) return false;
 
-            int currentProtection = getArmorProtection(current);
-            int potentialProtection = getArmorProtection(potential);
+        // 1.21.4: Проверяем слот через EquippableComponent
+        EquippableComponent currentEquip = current.get(DataComponentTypes.EQUIPPABLE);
+        EquippableComponent potentialEquip = potential.get(DataComponentTypes.EQUIPPABLE);
 
-            int currentToughness = (int) getArmorToughness(current);
-            int potentialToughness = (int) getArmorToughness(potential);
+        if (currentEquip == null || potentialEquip == null) return false;
+        if (currentEquip.slot() != slot || potentialEquip.slot() != slot) return false;
 
-            int currentEnchants = getTotalEnchantmentLevel(current);
-            int potentialEnchants = getTotalEnchantmentLevel(potential);
+        int currentProtection = getArmorProtection(current);
+        int potentialProtection = getArmorProtection(potential);
 
-            int currentScore = currentProtection + currentToughness + currentEnchants;
-            int potentialScore = potentialProtection + potentialToughness + potentialEnchants;
-            return potentialScore > currentScore;
-        }
-        return false;
+        int currentToughness = (int) getArmorToughness(current);
+        int potentialToughness = (int) getArmorToughness(potential);
+
+        int currentEnchants = getTotalEnchantmentLevel(current);
+        int potentialEnchants = getTotalEnchantmentLevel(potential);
+
+        int currentScore = currentProtection + currentToughness + currentEnchants;
+        int potentialScore = potentialProtection + potentialToughness + potentialEnchants;
+        return potentialScore > currentScore;
     }
 
     private static int getArmorProtection(ItemStack stack) {
@@ -355,7 +357,8 @@ public class InventoryUtil implements IMinecraft {
     public static void equipItem(int slot) {
         if (mc.player == null) return;
         ItemStack stack = mc.player.getInventory().getStack(slot);
-        if (stack.getItem() instanceof ArmorItem armor) {
+        EquippableComponent equippable = stack.get(DataComponentTypes.EQUIPPABLE);
+        if (equippable != null) {
             mc.interactionManager.clickSlot(mc.player.currentScreenHandler.syncId, slot, 0, SlotActionType.QUICK_MOVE, mc.player);
         }
     }
@@ -405,21 +408,19 @@ public class InventoryUtil implements IMinecraft {
     }
 
     // === ИСПРАВЛЕННЫЙ МЕТОД: getBestArmorSlot ===
-    // 1.21.4: ArmorItem.getSlotType() → ArmorItem.getSlot()
+    // 1.21.4: Через EquippableComponent вместо ArmorItem.getSlotType()
     public static int getBestArmorSlot(EquipmentSlot slot) {
         if (mc.player == null) return -1;
         int bestSlot = -1;
         int bestProtection = -1;
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() instanceof ArmorItem armor) {
-                // 1.21.4: getSlot() вместо getSlotType()
-                if (armor.getSlot() == slot) {
-                    int protection = getArmorProtection(stack);
-                    if (protection > bestProtection) {
-                        bestProtection = protection;
-                        bestSlot = i;
-                    }
+            EquippableComponent equippable = stack.get(DataComponentTypes.EQUIPPABLE);
+            if (equippable != null && equippable.slot() == slot) {
+                int protection = getArmorProtection(stack);
+                if (protection > bestProtection) {
+                    bestProtection = protection;
+                    bestSlot = i;
                 }
             }
         }
@@ -427,11 +428,13 @@ public class InventoryUtil implements IMinecraft {
     }
 
     // === ИСПРАВЛЕННЫЙ МЕТОД: isStackBetter ===
-    // 1.21.4: getSlotType() → getSlot()
+    // 1.21.4: Через EquippableComponent
     public static boolean isStackBetter(ItemStack current, ItemStack potential) {
         if (potential.isEmpty()) return false;
         if (current.isEmpty()) return true;
-        return potential.getItem() instanceof ArmorItem && isArmorBetter(current, potential, ((ArmorItem) potential.getItem()).getSlot());
+        EquippableComponent equip = potential.get(DataComponentTypes.EQUIPPABLE);
+        if (equip == null) return false;
+        return isArmorBetter(current, potential, equip.slot());
     }
 
     public static void openInventory() {
