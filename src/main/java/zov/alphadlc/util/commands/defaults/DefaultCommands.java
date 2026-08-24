@@ -11,7 +11,9 @@ import java.util.List;
 public final class DefaultCommands {
 
     public static List<ICommand> createAll() {
-        // Фикс: явно указываем тип ArrayList<ICommand> вместо diamond operator
+        // PartyCommand и AICommand наследуют Command (не ICommand),
+        // поэтому их нельзя добавить в этот список.
+        // Они регистрируются отдельно через свою систему команд.
         List<ICommand> commands = new ArrayList<ICommand>(Arrays.<ICommand>asList(
                 new CfgCommand(),
                 new RotationCommand(),
@@ -22,9 +24,7 @@ public final class DefaultCommands {
                 new StaffCommand(AlphaDLC.getInstance()),
                 new VClipCommand(),
                 new TpCommand(),
-                new PartyCommand(),
                 new GpsCommand(),
-                new AICommand(),
                 new BotCommand()
         ));
         return Collections.unmodifiableList(commands);
