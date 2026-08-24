@@ -1,6 +1,9 @@
 package zov.alphadlc.module.list.player;
 
 import com.google.common.eventbus.Subscribe;
+import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.item.ArmorItem;
+import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
 import net.minecraft.util.Formatting;
@@ -10,6 +13,7 @@ import zov.alphadlc.module.Module;
 import zov.alphadlc.module.ModuleCategory;
 import zov.alphadlc.module.ModuleInformation;
 import zov.alphadlc.module.settings.BooleanSetting;
+import zov.alphadlc.module.settings.ModeSetting;
 import zov.alphadlc.module.settings.SliderSetting;
 import zov.alphadlc.util.chat.ChatUtil;
 import zov.alphadlc.util.player.other.InventoryUtil;
@@ -40,11 +44,12 @@ public class ElytraHelper extends Module {
     public void onTick(EventTick event) {
         if (mc.player == null) return;
 
-        if (autoEquip.getValue() && !mc.player.isFallFlying() && shouldEquipElytra()) {
+        // 1.21.4: isFallFlying() → isGliding()
+        if (autoEquip.getValue() && !mc.player.isGliding() && shouldEquipElytra()) {
             equipElytra();
         }
 
-        if (autoFirework.getValue() && mc.player.isFallFlying()) {
+        if (autoFirework.getValue() && mc.player.isGliding()) {
             tickCounter++;
             if (tickCounter >= fireworkDelay.getValue()) {
                 useFirework();
@@ -52,7 +57,7 @@ public class ElytraHelper extends Module {
             }
         }
 
-        wasFlying = mc.player.isFallFlying();
+        wasFlying = mc.player.isGliding();
     }
 
     private boolean shouldEquipElytra() {
@@ -94,11 +99,27 @@ public class ElytraHelper extends Module {
 
     private int findChestplate() {
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
-            if (mc.player.getInventory().getStack(i).getItem() instanceof net.minecraft.item.ArmorItem armor
-                && armor.getSlotType() == net.minecraft.entity.EquipmentSlot.CHEST) {
-                return i;
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (stack.getItem() instanceof ArmorItem armor) {
+                // 1.21.4: getSlotType() → getEquipmentSlot()
+                if (armor.getEquipmentSlot() == EquipmentSlot.CHEST) {
+                    return i;
+                }
             }
         }
         return -1;
+    }
+
+    /**
+     * Метод для AirStuck — свапает элитру/нагрудник
+     * @param mode режим (не используется в текущей реализации)
+     * @param equipElytra true — надеть элитру, false — нагрудник
+     */
+    public void swap(ModeSetting mode, boolean equipElytra) {
+        if (equipElytra) {
+            equipElytra();
+        } else {
+            equipChestplate();
+        }
     }
 }

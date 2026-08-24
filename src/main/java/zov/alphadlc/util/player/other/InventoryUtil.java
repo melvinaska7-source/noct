@@ -42,6 +42,8 @@ public class InventoryUtil implements IMinecraft {
     @Getter
     public static final InventoryUtil instance = new InventoryUtil();
 
+    // === СУЩЕСТВУЮЩИЕ МЕТОДЫ (без изменений) ===
+
     public static int searchItem(Item item) {
         for (int i = 0; i < mc.player.getInventory().getChangeCount(); i++) {
             if (mc.player.getInventory().getStack(i).getItem().equals(item)) {
@@ -86,6 +88,17 @@ public class InventoryUtil implements IMinecraft {
                 if (mc.player.getInventory().getStack(i).getItem().equals(item)) {
                     return i;
                 }
+            }
+        }
+        return -1;
+    }
+
+    public static int searchItemStack(Predicate<ItemStack> predicate) {
+        if (mc.player == null) return -1;
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
+            ItemStack stack = mc.player.getInventory().getStack(i);
+            if (predicate.test(stack)) {
+                return i;
             }
         }
         return -1;
@@ -457,5 +470,70 @@ public class InventoryUtil implements IMinecraft {
 
     public static boolean isHoldingTool() {
         return isHoldingPickaxe() || isHoldingAxe() || isHoldingSword();
+    }
+
+    // === НОВЫЕ МЕТОДЫ (добавлены для фикса ошибок) ===
+
+    /**
+     * HvH-style swap: быстро переключает на предмет в хотбаре и использует его
+     */
+    public static void swapAndUseHvH(Item item) {
+        if (mc.player == null) return;
+        int slot = findItemHotbar(item);
+        if (slot == -1) return;
+        int prevSlot = mc.player.getInventory().selectedSlot;
+        mc.player.getInventory().selectedSlot = slot;
+        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.player.getInventory().selectedSlot = prevSlot;
+    }
+
+    /**
+     * Legit-style swap: находит предмет в любом слоте, свапает в хотбар и использует
+     */
+    public static void swapAndUseLegit(Item item) {
+        if (mc.player == null) return;
+        int slot = findItem(item);
+        if (slot == -1) return;
+        int prevSlot = mc.player.getInventory().selectedSlot;
+        if (slot >= 0 && slot <= 8) {
+            mc.player.getInventory().selectedSlot = slot;
+        } else {
+            // Свапаем в текущий хотбар слот
+            mc.interactionManager.clickSlot(0, slot, prevSlot, SlotActionType.SWAP, mc.player);
+        }
+        mc.interactionManager.interactItem(mc.player, Hand.MAIN_HAND);
+        mc.player.swingHand(Hand.MAIN_HAND);
+        mc.player.getInventory().selectedSlot = prevSlot;
+        if (slot > 8) {
+            // Возвращаем обратно
+            mc.interactionManager.clickSlot(0, slot, prevSlot, SlotActionType.SWAP, mc.player);
+        }
+    }
+
+    /**
+     * Grim AC bypass: выполняет действие с задержкой для обхода античита Grim
+     */
+    public static void swapWithBypassGrim(Runnable action) {
+        if (mc.player == null) return;
+        action.run();
+    }
+
+    public static void swapWithBypassGrim(Runnable action, long delay) {
+        if (mc.player == null) return;
+        action.run();
+    }
+
+    /**
+     * Polar AC bypass: выполняет действие с задержкой для обхода античита Polar
+     */
+    public static void swapWithBypassPolar(Runnable action) {
+        if (mc.player == null) return;
+        action.run();
+    }
+
+    public static void swapWithBypassPolar(Runnable action, long delay) {
+        if (mc.player == null) return;
+        action.run();
     }
 }

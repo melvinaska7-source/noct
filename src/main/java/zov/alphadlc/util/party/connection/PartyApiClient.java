@@ -1,5 +1,6 @@
 package zov.alphadlc.util.party.connection;
 
+import com.google.gson.JsonObject;
 import net.minecraft.util.Formatting;
 import zov.alphadlc.util.chat.ChatUtil;
 
@@ -7,6 +8,7 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 
 public class PartyApiClient {
 
@@ -39,6 +41,33 @@ public class PartyApiClient {
     public String getPartyMembers(String partyId) {
         return get("/members?partyId=" + partyId);
     }
+
+    // === Статические методы для ModuleStorage ===
+
+    public static void fetchPartyStateAsync() {
+        // Заглушка — можно реализовать позже
+    }
+
+    public static void fetchInvitesAsync() {
+        // Заглушка — можно реализовать позже
+    }
+
+    public static void postAsync(String endpoint, JsonObject body, Consumer<JsonObject> callback) {
+        new Thread(() -> {
+            try {
+                String result = new PartyApiClient().post(endpoint, body.toString());
+                if (callback != null) {
+                    JsonObject response = new JsonObject();
+                    response.addProperty("response", result);
+                    callback.accept(response);
+                }
+            } catch (Exception e) {
+                ChatUtil.send(Formatting.RED + "Ошибка API (async): " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // === Приватные методы ===
 
     private String post(String endpoint, String body) {
         try {
