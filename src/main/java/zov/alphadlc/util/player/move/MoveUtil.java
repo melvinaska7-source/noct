@@ -6,6 +6,7 @@ import net.minecraft.util.PlayerInput;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import zov.alphadlc.util.IMinecraft;
+import zov.alphadlc.event.list.MoveInputEvent;
 
 import java.util.Objects;
 
@@ -27,7 +28,7 @@ public class MoveUtil implements IMinecraft {
     public double[] calculateDirection(final double distance) {
         float forward = mc.player.input.movementForward;
         float sideways = mc.player.input.movementSideways;
-        float yaw = mc.player.getYaw(); // Используем угол игрока, а не камеры
+        float yaw = mc.player.getYaw();
 
         if (forward != 0.0f) {
             if (sideways > 0.0f) {
@@ -109,27 +110,41 @@ public class MoveUtil implements IMinecraft {
     public PlayerInput getDirectionalInputForDegrees(PlayerInput input, double dgs) {
         return getDirectionalInputForDegrees(input, dgs, 20.0F);
     }
+
     /**
      * Корректирует движение игрока в направлении указанного yaw.
      * Используется в аурах для strafe к цели.
+     * Теперь использует MoveInputEvent вместо EventPlayerUpdate.
      */
-    public static void fixMovement(EventPlayerUpdate event, float yaw) {
+    public static void fixMovement(MoveInputEvent event, float yaw) {
         if (mc.player == null) return;
-        
+
         float forward = event.getForward();
         float strafe = event.getStrafe();
-        
+
         if (forward == 0 && strafe == 0) return;
-        
-        float yawRad = (float) Math.toRadians(yaw);
-        float sin = (float) Math.sin(yawRad);
-        float cos = (float) Math.cos(yawRad);
-        
-        float newForward = forward * cos + strafe * sin;
-        float newStrafe = strafe * cos - forward * sin;
-        
-        event.setForward(newForward);
-        event.setStrafe(newStrafe);
+
+        final double targetAngle = MathHelper.wrapDegrees(Math.toDegrees(direction(yaw, forward, strafe)));
+
+        float bestForward = 0, bestStrafe = 0;
+        float smallestDifference = Float.MAX_VALUE;
+
+        for (float testForward = -1F; testForward <= 1F; testForward++) {
+            for (float testStrafe = -1F; testStrafe <= 1F; testStrafe++) {
+                if (testForward == 0 && testStrafe == 0) continue;
+
+                final double testAngle = MathHelper.wrapDegrees(Math.toDegrees(direction(yaw, testForward, testStrafe)));
+                final float difference = Math.abs(MathHelper.wrapDegrees((float)(targetAngle - testAngle)));
+
+                if (difference < smallestDifference) {
+                    smallestDifference = difference;
+                    bestForward = testForward;
+                    bestStrafe = testStrafe;
+                }
+            }
+        }
+
+        event.forward = bestForward;
+        event.strafe = bestStrafe;
     }
-    
 }
