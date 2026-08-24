@@ -5,10 +5,14 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
 import lombok.Getter;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.AttributeModifiersComponent;
 import net.minecraft.enchantment.Enchantment;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.EquipmentSlot;
+import net.minecraft.entity.attribute.EntityAttributeModifier;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ArmorItem;
 import net.minecraft.item.Item;
@@ -45,7 +49,7 @@ public class InventoryUtil implements IMinecraft {
     // === СУЩЕСТВУЮЩИЕ МЕТОДЫ (без изменений) ===
 
     public static int searchItem(Item item) {
-        for (int i = 0; i < mc.player.getInventory().getChangeCount(); i++) {
+        for (int i = 0; i < mc.player.getInventory().size(); i++) {
             if (mc.player.getInventory().getStack(i).getItem().equals(item)) {
                 return i;
             }
@@ -63,7 +67,7 @@ public class InventoryUtil implements IMinecraft {
     }
 
     public static int searchItem(List<Item> items) {
-        for (var i = 0; i < mc.player.getInventory().getChangeCount(); i++) {
+        for (var i = 0; i < mc.player.getInventory().size(); i++) {
             for (var item : items) {
                 if (mc.player.getInventory().getStack(i).getItem().equals(item)) {
                     return i;
@@ -104,23 +108,71 @@ public class InventoryUtil implements IMinecraft {
         return -1;
     }
 
+    // === ИСПРАВЛЕННЫЙ МЕТОД: isArmorBetter ===
+    // 1.21.4: getSlotType() → getSlotType() (остался)
+    // 1.21.4: getProtection() → нет прямого метода, используем атрибуты
+    // 1.21.4: getToughness() → нет прямого метода, используем атрибуты
+    // 1.21.4: EnchantmentHelper.get(stack) → EnchantmentHelper.getEnchantments(stack)
     public static boolean isArmorBetter(ItemStack current, ItemStack potential, EquipmentSlot slot) {
         if (potential.isEmpty()) return false;
         if (current.isEmpty()) return true;
         if (!(potential.getItem() instanceof ArmorItem)) return false;
         if (current.getItem() instanceof ArmorItem currentArmor && potential.getItem() instanceof ArmorItem potentialArmor) {
             if (currentArmor.getSlotType() != slot || potentialArmor.getSlotType() != slot) return false;
-            int currentProtection = currentArmor.getProtection();
-            int potentialProtection = potentialArmor.getProtection();
-            int currentToughness = (int) currentArmor.getToughness();
-            int potentialToughness = (int) potentialArmor.getToughness();
-            int currentEnchants = EnchantmentHelper.get(current).values().stream().mapToInt(Integer::intValue).sum();
-            int potentialEnchants = EnchantmentHelper.get(potential).values().stream().mapToInt(Integer::intValue).sum();
+
+            // 1.21.4: Защита через атрибуты
+            int currentProtection = getArmorProtection(current);
+            int potentialProtection = getArmorProtection(potential);
+
+            // 1.21.4: Прочность через атрибуты
+            int currentToughness = (int) getArmorToughness(current);
+            int potentialToughness = (int) getArmorToughness(potential);
+
+            // 1.21.4: Зачарования через getEnchantments
+            int currentEnchants = getTotalEnchantmentLevel(current);
+            int potentialEnchants = getTotalEnchantmentLevel(potential);
+
             int currentScore = currentProtection + currentToughness + currentEnchants;
             int potentialScore = potentialProtection + potentialToughness + potentialEnchants;
             return potentialScore > currentScore;
         }
         return false;
+    }
+
+    // Вспомогательный метод: получение защиты брони через атрибуты (1.21.4)
+    private static int getArmorProtection(ItemStack stack) {
+        var component = stack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
+        if (component == null) return 0;
+        int protection = 0;
+        for (var entry : component.modifiers()) {
+            if (entry.attribute().equals(EntityAttributes.ARMOR)) {
+                protection += (int) entry.modifier().value();
+            }
+        }
+        return protection;
+    }
+
+    // Вспомогательный метод: получение прочности брони через атрибуты (1.21.4)
+    private static double getArmorToughness(ItemStack stack) {
+        var component = stack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
+        if (component == null) return 0;
+        double toughness = 0;
+        for (var entry : component.modifiers()) {
+            if (entry.attribute().equals(EntityAttributes.ARMOR_TOUGHNESS)) {
+                toughness += entry.modifier().value();
+            }
+        }
+        return toughness;
+    }
+
+    // Вспомогательный метод: суммарный уровень зачарований (1.21.4)
+    private static int getTotalEnchantmentLevel(ItemStack stack) {
+        var enchantments = EnchantmentHelper.getEnchantments(stack);
+        int total = 0;
+        for (var entry : enchantments.getEnchantmentEntries()) {
+            total += entry.getIntValue();
+        }
+        return total;
     }
 
     public static int countItem(Item item) {
@@ -318,6 +370,7 @@ public class InventoryUtil implements IMinecraft {
         }
     }
 
+    // === ИСПРАВЛЕННЫЙ МЕТОД: getBestToolSlot (без изменений, работает) ===
     public static int getBestToolSlot(net.minecraft.block.BlockState state) {
         if (mc.player == null) return -1;
         int bestSlot = -1;
@@ -333,14 +386,17 @@ public class InventoryUtil implements IMinecraft {
         return bestSlot;
     }
 
+    // === ИСПРАВЛЕННЫЙ МЕТОД: getBestWeaponSlot ===
+    // 1.21.4: SwordItem.getMaterial() → убран, используем атрибуты урона
     public static int getBestWeaponSlot() {
         if (mc.player == null) return -1;
         int bestSlot = -1;
         double bestDamage = 0;
         for (int i = 0; i < 9; i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() instanceof net.minecraft.item.SwordItem sword) {
-                double damage = sword.getMaterial().getAttackDamage() + 4;
+            if (stack.getItem() instanceof net.minecraft.item.SwordItem) {
+                // 1.21.4: Урон через компонент атрибутов
+                double damage = getItemAttackDamage(stack);
                 if (damage > bestDamage) {
                     bestDamage = damage;
                     bestSlot = i;
@@ -350,17 +406,35 @@ public class InventoryUtil implements IMinecraft {
         return bestSlot;
     }
 
+    // Вспомогательный метод: получение урона предмета через атрибуты (1.21.4)
+    private static double getItemAttackDamage(ItemStack stack) {
+        var component = stack.get(DataComponentTypes.ATTRIBUTE_MODIFIERS);
+        if (component == null) return 0;
+        double damage = 0;
+        for (var entry : component.modifiers()) {
+            if (entry.attribute().equals(EntityAttributes.ATTACK_DAMAGE)) {
+                damage += entry.modifier().value();
+            }
+        }
+        return damage;
+    }
+
+    // === ИСПРАВЛЕННЫЙ МЕТОД: getBestArmorSlot ===
+    // 1.21.4: getSlotType() → getSlotType() (остался)
+    // 1.21.4: getProtection() → через атрибуты
     public static int getBestArmorSlot(EquipmentSlot slot) {
         if (mc.player == null) return -1;
         int bestSlot = -1;
         int bestProtection = -1;
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
-            if (stack.getItem() instanceof ArmorItem armor && armor.getSlotType() == slot) {
-                int protection = armor.getProtection();
-                if (protection > bestProtection) {
-                    bestProtection = protection;
-                    bestSlot = i;
+            if (stack.getItem() instanceof ArmorItem armor) {
+                if (armor.getSlotType() == slot) {
+                    int protection = getArmorProtection(stack);
+                    if (protection > bestProtection) {
+                        bestProtection = protection;
+                        bestSlot = i;
+                    }
                 }
             }
         }
@@ -387,9 +461,11 @@ public class InventoryUtil implements IMinecraft {
         return mc.player != null && mc.player.currentScreenHandler != mc.player.playerScreenHandler;
     }
 
+    // === ИСПРАВЛЕННЫЙ МЕТОД: isHoldingFood ===
+    // 1.21.4: Item.getFoodComponent() → Item.getComponents().get(DataComponentTypes.FOOD)
     public static boolean isHoldingFood() {
         if (mc.player == null) return false;
-        return mc.player.getMainHandStack().getItem().getFoodComponent() != null;
+        return mc.player.getMainHandStack().get(DataComponentTypes.FOOD) != null;
     }
 
     public static boolean isHoldingPotion() {

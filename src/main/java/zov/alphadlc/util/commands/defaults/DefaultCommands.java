@@ -1,5 +1,3 @@
-
-
 package zov.alphadlc.util.commands.defaults;
 
 import zov.alphadlc.AlphaDLC;
@@ -13,7 +11,8 @@ import java.util.List;
 public final class DefaultCommands {
 
     public static List<ICommand> createAll() {
-        List<ICommand> commands = new ArrayList<>(Arrays.asList(
+        // Фикс: явно указываем тип ArrayList<ICommand> вместо diamond operator
+        List<ICommand> commands = new ArrayList<ICommand>(Arrays.<ICommand>asList(
                 new CfgCommand(),
                 new RotationCommand(),
                 new HelpCommand(AlphaDLC.getInstance()),

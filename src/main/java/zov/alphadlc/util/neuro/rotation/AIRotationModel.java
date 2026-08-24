@@ -65,21 +65,20 @@ public class AIRotationModel implements Closeable {
         try (Trainer trainer = model.newTrainer(trainingConfig)) {
             trainer.initialize(new Shape(BATCH_SIZE, INPUT_SIZE));
 
-            float[] flatFeatures = new float[features.length * INPUT_SIZE];
-            float[] flatLabels = new float[labels.length * OUTPUT_SIZE];
-            for (int i = 0; i < features.length; i++) {
-                System.arraycopy(features[i], 0, flatFeatures, i * INPUT_SIZE, INPUT_SIZE);
-                System.arraycopy(labels[i], 0, flatLabels, i * OUTPUT_SIZE, OUTPUT_SIZE);
+            // 1.21.4 DJL API: setData требует NDArray[], а не float[]
+            // Создаём NDArray через NDManager
+            try (NDManager manager = NDManager.newBaseManager()) {
+                var dataArray = manager.create(flatten(features), new Shape(features.length, INPUT_SIZE));
+                var labelsArray = manager.create(flatten(labels), new Shape(labels.length, OUTPUT_SIZE));
+
+                ArrayDataset dataset = new ArrayDataset.Builder()
+                        .setData(dataArray)
+                        .optLabels(labelsArray)
+                        .setSampling(BATCH_SIZE, true)
+                        .build();
+
+                EasyTrain.fit(trainer, NUM_EPOCH, dataset, null);
             }
-
-            ArrayDataset dataset = new ArrayDataset.Builder()
-                    .setData(flatFeatures)
-                    .setLabels(flatLabels)
-                    .optLabels(new Shape(OUTPUT_SIZE))
-                    .setSampling(BATCH_SIZE, true)
-                    .build();
-
-            EasyTrain.fit(trainer, NUM_EPOCH, dataset, null);
         }
 
         ChatUtil.send("§aОбучение завершено!");
@@ -104,6 +103,15 @@ public class AIRotationModel implements Closeable {
                 .add(BatchNorm.builder().build())
                 .add(Activation::relu)
                 .add(Linear.builder().setUnits(OUTPUT_SIZE).build());
+    }
+
+    // Вспомогательный метод для flatten 2D массива
+    private static float[] flatten(float[][] array) {
+        float[] result = new float[array.length * array[0].length];
+        for (int i = 0; i < array.length; i++) {
+            System.arraycopy(array[i], 0, result, i * array[0].length, array[i].length);
+        }
+        return result;
     }
 
     @Override

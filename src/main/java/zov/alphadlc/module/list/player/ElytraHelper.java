@@ -101,8 +101,8 @@ public class ElytraHelper extends Module {
         for (int i = 0; i < mc.player.getInventory().size(); i++) {
             ItemStack stack = mc.player.getInventory().getStack(i);
             if (stack.getItem() instanceof ArmorItem armor) {
-                // 1.21.4: getSlotType() → getEquipmentSlot()
-                if (armor.getEquipmentSlot() == EquipmentSlot.CHEST) {
+                // 1.21.4: getSlotType() — используем EquipmentSlot из ItemStack
+                if (armor.getSlotType() == EquipmentSlot.CHEST) {
                     return i;
                 }
             }
