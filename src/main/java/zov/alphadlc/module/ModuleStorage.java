@@ -55,7 +55,7 @@ public class ModuleStorage implements IMinecraft {
                 new AutoDuel(), new DragonFly(), new Strafe(),
                 new ChestStealer(), new SeeInvisible(), new ShulkerView(),
                 new ServerJoiner(), new UseIndicator(), new ServerHelper(),
-                new Particles(), new Arrows(), new AttackAura(), new LegitAura(),
+                new Particles(), new Arrows(), new AttackAura(),
                 new TeleportExploit(), new AutoTrap(), new AppleFarm(),
                 new TargetPearl(), new LineGlyphs(), new HitIndicator(),
                 new GrimGlide(), new Timer(), new MaceTarget(), new NoEntityTrace(),
