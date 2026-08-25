@@ -11,6 +11,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import zov.alphadlc.event.list.EventTick;
 import zov.alphadlc.module.Module;
@@ -106,7 +107,6 @@ public class AppleFarm extends Module {
             if (farmLocation == null) return;
         }
 
-        // Проверка дистанции
         if (mc.player.squaredDistanceTo(farmLocation.toCenterPos()) > Math.pow(maxFarmDistance.getValue(), 2)) {
             if (notifyTimer++ > 50) {
                 ChatUtil.addMessage("§eСлишком далеко от точки фермы!");
@@ -119,7 +119,6 @@ public class AppleFarm extends Module {
             return;
         }
 
-        // Дерево выросло — рубим
         if (isTreeGrown()) {
             if (breakMode.getValue().equals("Baritone")) {
                 updateBaritoneMining();
@@ -128,7 +127,6 @@ public class AppleFarm extends Module {
             return;
         }
 
-        // Дерева нет — сбрасываем
         currentTargetBlock = null;
         targetBlockSide = null;
 
@@ -137,11 +135,9 @@ public class AppleFarm extends Module {
             isBaritoneMining = false;
         }
 
-        // Задержка между действиями
         if (actionTimer-- > 0) return;
-        actionTimer = actionDelay.getValue().intValue();
+        actionTimer = (int) actionDelay.getValue();
 
-        // Сажаем саженец
         if (!isSaplingPlanted()) {
             if (!tryPlantSapling()) {
                 if (notifyTimer++ > 50) {
@@ -157,7 +153,6 @@ public class AppleFarm extends Module {
             return;
         }
 
-        // Удобряем
         if (!tryApplyBoneMeal()) {
             if (notifyTimer++ > 100) {
                 ChatUtil.addMessage("§7Нет костной муки, ждем естественного роста...");
@@ -180,7 +175,6 @@ public class AppleFarm extends Module {
     private void performManualChop() {
         if (breakTimer-- > 0) return;
 
-        // Ищем новую цель, если текущая пропала
         if (currentTargetBlock == null || !isValidChopTarget(currentTargetBlock)) {
             BlockInfo best = findBestBlockToChop();
             if (best == null) {
@@ -194,10 +188,8 @@ public class AppleFarm extends Module {
 
         if (currentTargetBlock == null || targetBlockSide == null) return;
 
-        // Наводимся и рубим
         if (!aimAtBlock(currentTargetBlock, targetBlockSide)) return;
 
-        // Переключаемся на топор
         int axeSlot = InventoryUtil.getBestToolSlot(mc.world.getBlockState(currentTargetBlock));
         if (axeSlot != -1 && mc.player.getInventory().selectedSlot != axeSlot) {
             mc.player.getInventory().selectedSlot = axeSlot;
@@ -221,7 +213,6 @@ public class AppleFarm extends Module {
         BlockPos plantPos = farmLocation.up();
         if (!mc.world.isAir(plantPos)) return false;
 
-        // Наводимся на блок под посадкой
         Vec3d lookTarget = plantPos.toCenterPos().add(0, -0.5, 0);
         lookAt(lookTarget);
 
@@ -254,7 +245,6 @@ public class AppleFarm extends Module {
             int swapTo = InventoryUtil.getEmptyHotbarSlot();
             if (swapTo == -1) return false;
 
-            // Конвертируем слот инвентаря в слот контейнера
             int containerSlot = invSlot < 9 ? invSlot + 36 : invSlot;
             InventoryUtil.swapSlots(containerSlot, swapTo);
             mealSlot = swapTo;
@@ -263,7 +253,6 @@ public class AppleFarm extends Module {
         int oldSlot = mc.player.getInventory().selectedSlot;
         mc.player.getInventory().selectedSlot = mealSlot;
 
-        // Наводимся на саженец
         lookAt(farmLocation.up().toCenterPos());
 
         BlockHitResult hit = new BlockHitResult(
@@ -280,11 +269,9 @@ public class AppleFarm extends Module {
         return result.isAccepted();
     }
 
-    // === Helpers ===
-
     private boolean isTreeGrown() {
-        int r = scanRadius.getValue().intValue();
-        int h = scanHeight.getValue().intValue();
+        int r = (int) scanRadius.getValue();
+        int h = (int) scanHeight.getValue();
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
                 for (int y = 0; y <= h; y++) {
@@ -352,8 +339,8 @@ public class AppleFarm extends Module {
         List<BlockInfo> logs = new ArrayList<>();
         List<BlockInfo> leaves = new ArrayList<>();
 
-        int r = scanRadius.getValue().intValue();
-        int h = scanHeight.getValue().intValue();
+        int r = (int) scanRadius.getValue();
+        int h = (int) scanHeight.getValue();
 
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
@@ -380,8 +367,8 @@ public class AppleFarm extends Module {
     }
 
     private boolean anyLeavesNearby() {
-        int r = scanRadius.getValue().intValue();
-        int h = scanHeight.getValue().intValue();
+        int r = (int) scanRadius.getValue();
+        int h = (int) scanHeight.getValue();
         for (int x = -r; x <= r; x++) {
             for (int z = -r; z <= r; z++) {
                 for (int y = 0; y <= h; y++) {
@@ -436,14 +423,13 @@ public class AppleFarm extends Module {
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, distXZ));
         pitch = Math.max(-90, Math.min(90, pitch));
 
-        // Проверяем, наведены ли уже
         float yawDiff = Math.abs(MathHelper.wrapDegrees(yaw - mc.player.getYaw()));
         float pitchDiff = Math.abs(pitch - mc.player.getPitch());
 
         mc.player.setYaw(yaw);
         mc.player.setPitch(pitch);
 
-        return yawDiff < 10 && pitchDiff < 10; // Уже наведены достаточно точно
+        return yawDiff < 10 && pitchDiff < 10;
     }
 
     private int findHotbarSlot(Item item) {
@@ -474,8 +460,6 @@ public class AppleFarm extends Module {
             mc.player.networkHandler.sendChatCommand(command.replace("#", ""));
         }
     }
-
-    // === Inner class ===
 
     private static class BlockInfo {
         final BlockPos pos;
