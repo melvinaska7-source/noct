@@ -12,13 +12,15 @@ base {
 
 repositories {
 	mavenCentral()
-	flatDir {
-		dirs 'libs'
-	}
+}
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
 }
 
 dependencies {
-	include modImplementation(files('libs/baritone-1.21.4-SNAPSHOT.jar'))
+    implementation files('libs/baritone-1.21.4-SNAPSHOT.jar')
 
 	implementation 'org.projectlombok:lombok:1.18.36'
 	annotationProcessor 'org.projectlombok:lombok:1.18.36'

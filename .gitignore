@@ -19,7 +19,6 @@ run/
 .factorypath
 
 # github
-*.jar
 *.class
 build/
 out/

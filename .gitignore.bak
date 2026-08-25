@@ -18,6 +18,16 @@ run/
 .classpath
 .factorypath
 
+# github
+*.jar
+*.class
+build/
+out/
+target/
+*.log
+*.iml
+.idea/
+
 # OS
 .DS_Store
 Thumbs.db
