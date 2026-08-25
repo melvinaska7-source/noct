@@ -18,7 +18,8 @@ repositories {
 }
 
 dependencies {
-	include modImplementation(files('libs/baritone-1.21.4-SNAPSHOT.jar'))
+	// Baritone — подключаем как мод, НЕ встраиваем
+	modImplementation files('libs/baritone-1.21.4-SNAPSHOT.jar')
 
 	implementation 'org.projectlombok:lombok:1.18.36'
 	annotationProcessor 'org.projectlombok:lombok:1.18.36'
@@ -32,6 +33,7 @@ dependencies {
 	testImplementation "org.junit.jupiter:junit-jupiter"
 	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
 
+	// DJL — встраиваем в jar
 	include modImplementation("ai.djl:api:0.32.0")
 	include modImplementation("ai.djl.pytorch:pytorch-engine:0.32.0")
 
@@ -67,7 +69,6 @@ java {
 	targetCompatibility = JavaVersion.VERSION_21
 }
 
-// configure the maven publication
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
@@ -77,7 +78,5 @@ publishing {
 	}
 
 	repositories {
-		// Add repositories to publish to here.
-		// Notice: This block does NOT have the same function as the block in the top level.
 	}
 }
