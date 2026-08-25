@@ -13,16 +13,18 @@ import net.minecraft.entity.passive.AllayEntity;
 import net.minecraft.entity.passive.GolemEntity;
 import net.minecraft.entity.passive.PassiveEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ArmorItem;
 import net.minecraft.item.AxeItem;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket;
+import net.minecraft.network.packet.c2s.play.PlayerInputC2SPacket;
 import net.minecraft.util.Hand;
+import net.minecraft.util.PlayerInput;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import zov.alphadlc.util.friend.FriendRepository;
-import zov.alphadlc.event.list.MoveInputEvent;
+import zov.alphadlc.event.list.EventGameUpdate;
 import zov.alphadlc.event.list.EventTick;
+import zov.alphadlc.event.list.MoveInputEvent;
 import zov.alphadlc.module.Module;
 import zov.alphadlc.module.ModuleCategory;
 import zov.alphadlc.module.ModuleInformation;
@@ -31,8 +33,11 @@ import zov.alphadlc.module.settings.ModeSetting;
 import zov.alphadlc.module.settings.SliderSetting;
 import zov.alphadlc.util.IMinecraft;
 import zov.alphadlc.util.chat.ChatUtil;
+import zov.alphadlc.util.math.RotationUtil;
 import zov.alphadlc.util.player.combat.AuraUtil;
+import zov.alphadlc.util.player.combat.IdealHitUtils;
 import zov.alphadlc.util.player.combat.MaceUtil;
+import zov.alphadlc.util.player.combat.RaytraceUtil;
 import zov.alphadlc.util.player.move.MoveUtil;
 import zov.alphadlc.util.player.other.InventoryUtil;
 import zov.alphadlc.util.rotation.Rotation;
@@ -44,7 +49,7 @@ import java.util.stream.StreamSupport;
 
 /**
  * AttackAura — агрессивная KillAura для обхода античитов.
- * Быстрые ротации, минимальная задержка, авто-щитобой.
+ * ИСПРАВЛЕНО: Ротация через RotationComponent, атака через RaytraceUtil.
  */
 @ModuleInformation(
     moduleName = "AttackAura",
@@ -59,29 +64,33 @@ public class AttackAura extends Module {
     private final ModeSetting targetMode = new ModeSetting("Цели", "Все", "Все", "Игроки", "Мобы");
     private final SliderSetting attackRange = new SliderSetting("Дистанция", 3.5f, 1.0f, 6.0f, 0.1f);
     private final SliderSetting fov = new SliderSetting("FOV", 180.0f, 30.0f, 180.0f, 5.0f);
+    private final SliderSetting aps = new SliderSetting("APS", 12.0f, 1.0f, 20.0f, 1.0f);
     private final BooleanSetting onlyCrits = new BooleanSetting("Только криты", true);
     private final BooleanSetting shieldBreaker = new BooleanSetting("Пробитие щита", true);
     private final BooleanSetting smartSprint = new BooleanSetting("Умный спринт", true);
-    private final BooleanSetting wallCheck = new BooleanSetting("Проверка стен", false);
-    private final BooleanSetting autoMace = new BooleanSetting("Авто-булава", true);
     private final BooleanSetting hitThroughWalls = new BooleanSetting("Сквозь стены", false);
+    private final BooleanSetting autoMace = new BooleanSetting("Авто-булава", true);
+    private final BooleanSetting clientLook = new BooleanSetting("Клиент лук", false);
+    private final BooleanSetting raycastCheck = new BooleanSetting("Проверка наведения", true);
 
     // === State ===
     private LivingEntity target;
-    private int attackCooldown = 0;
-    private int blockHitDelay = 0;
+    private long lastAttackTime = 0;
     private int axeSlot = -1;
     private int prevSlot = -1;
     private boolean wasSprinting = false;
+    private float lastYaw;
+    private float lastPitch;
 
     @Override
     public void onEnable() {
         target = null;
-        attackCooldown = 0;
-        blockHitDelay = 0;
+        lastAttackTime = 0;
         axeSlot = -1;
         prevSlot = -1;
         wasSprinting = false;
+        lastYaw = 0;
+        lastPitch = 0;
     }
 
     @Override
@@ -90,10 +99,37 @@ public class AttackAura extends Module {
         restoreSlot();
     }
 
+    // === РОТАЦИЯ — вызывается КАЖДЫЙ КАДР (EventGameUpdate) ===
+    @Subscribe
+    public void onGameUpdate(EventGameUpdate event) {
+        if (mc.player == null || target == null) return;
+
+        Rotation targetRot = calculateRotation(target);
+        
+        String mode = rotationMode.getValue();
+        boolean isClientLook = clientLook.getValue();
+
+        if (mode.equals("Instant")) {
+            // Instant — мгновенная ротация через RotationComponent
+            RotationComponent.update(targetRot, 360, 360, 360, 360, 0, 1, isClientLook);
+        } else if (mode.equals("Smooth")) {
+            // Smooth — плавная ротация
+            RotationComponent.update(targetRot, 45, 45, 45, 45, 0, 1, isClientLook);
+        } else if (mode.equals("Silent")) {
+            // Silent — только серверная ротация (clientLook = false)
+            RotationComponent.update(targetRot, 360, 360, 360, 360, 0, 1, false);
+        }
+
+        lastYaw = targetRot.getYaw();
+        lastPitch = targetRot.getPitch();
+    }
+
+    // === АТАКА — вызывается 20 раз/сек (EventTick) ===
     @Subscribe
     public void onTick(EventTick event) {
         if (mc.player == null || mc.world == null) return;
 
+        // Ищем цель
         if (!isValidTarget(target)) {
             target = findTarget().orElse(null);
         }
@@ -103,14 +139,10 @@ public class AttackAura extends Module {
             return;
         }
 
-        rotateToTarget();
-
+        // Проверяем, можем ли атаковать
         if (canAttack()) {
             performAttack();
         }
-
-        attackCooldown++;
-        blockHitDelay = Math.max(0, blockHitDelay - 1);
     }
 
     @Subscribe
@@ -178,10 +210,27 @@ public class AttackAura extends Module {
         return angle <= maxFov / 2.0f;
     }
 
+    // === Rotation Calculation ===
+
+    private Rotation calculateRotation(LivingEntity entity) {
+        Vec3d eye = mc.player.getEyePos();
+        Vec3d targetPos = entity.getPos().add(0, entity.getHeight() * 0.5, 0);
+
+        double dx = targetPos.x - eye.x;
+        double dy = targetPos.y - eye.y;
+        double dz = targetPos.z - eye.z;
+
+        double distanceXZ = Math.sqrt(dx * dx + dz * dz);
+        float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
+        float targetPitch = (float) -Math.toDegrees(Math.atan2(dy, distanceXZ));
+
+        return new Rotation(targetYaw, MathHelper.clamp(targetPitch, -90f, 90f));
+    }
+
     // === Attack Logic ===
 
     private void performAttack() {
-        if (mc.interactionManager == null) return;
+        if (mc.interactionManager == null || target == null) return;
 
         if (shieldBreaker.getValue() && target.isBlocking()) {
             handleShieldBreak();
@@ -193,9 +242,7 @@ public class AttackAura extends Module {
             return;
         }
 
-        if (shouldAttackNormal()) {
-            doAttack();
-        }
+        doAttack();
     }
 
     private void handleShieldBreak() {
@@ -210,11 +257,10 @@ public class AttackAura extends Module {
         }
 
         int axeInv = findAxe(9, 36);
-        if (axeInv != -1 && blockHitDelay <= 0) {
-            int emptySlot = findEmptyHotbarSlot();
+        if (axeInv != -1) {
+            int emptySlot = InventoryUtil.getEmptyHotbarSlot();
             if (emptySlot != -1) {
                 InventoryUtil.swapSlots(axeInv, emptySlot);
-                blockHitDelay = 5;
                 return;
             }
         }
@@ -237,6 +283,7 @@ public class AttackAura extends Module {
     }
 
     private void doAttack() {
+        // Сброс спринта для критов
         if (onlyCrits.getValue() && !smartSprint.getValue() && mc.player.isSprinting()
             && !mc.player.isTouchingWater() && !mc.player.isInLava()) {
             mc.player.setSprinting(false);
@@ -245,10 +292,19 @@ public class AttackAura extends Module {
             wasSprinting = true;
         }
 
+        // Стоп движение на момент удара (как в KillAura)
+        mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(
+            new PlayerInput(false, false, false, false, false, false, false)));
+
+        // Атака
         mc.interactionManager.attackEntity(mc.player, target);
         mc.player.swingHand(Hand.MAIN_HAND);
-        attackCooldown = 0;
+        lastAttackTime = System.currentTimeMillis();
 
+        // Восстановление движения
+        mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
+
+        // Восстановление спринта
         if (wasSprinting && smartSprint.getValue()) {
             mc.player.setSprinting(true);
             mc.player.networkHandler.sendPacket(
@@ -260,22 +316,30 @@ public class AttackAura extends Module {
     private boolean canAttack() {
         if (target == null || mc.player == null) return false;
 
-        if (!AuraUtil.canAttack(mc.player.getYaw(), mc.player.getPitch(),
-            attackRange.getValue(), target, hitThroughWalls.getValue())) {
+        // Проверка APS
+        long delayMs = (long) (1000.0 / aps.getValue());
+        if (System.currentTimeMillis() - lastAttackTime < delayMs) return false;
+
+        // Проверка кулдауна атаки (как в KillAura)
+        if (!AlphaDLC.getInstance().getIdealHitUtils().cooldownIsReached(false)) return false;
+
+        // Проверка дистанции
+        if (mc.player.getEyePos().distanceTo(target.getPos().add(0, target.getHeight() * 0.5, 0)) > attackRange.getValue()) {
             return false;
         }
 
+        // Проверка наведения (raycast) — КЛЮЧЕВОЕ!
+        if (raycastCheck.getValue() && !hitThroughWalls.getValue()) {
+            if (!RaytraceUtil.rayTrace(mc.player.getRotationVector(), attackRange.getValue(), target.getBoundingBox())) {
+                return false;
+            }
+        }
+
+        // Проверка критов
         if (onlyCrits.getValue() && !AuraUtil.isCritPossible()) {
             return false;
         }
 
-        return mc.player.getAttackCooldownProgress(0.5f) >= 0.9f && attackCooldown >= 10;
-    }
-
-    private boolean shouldAttackNormal() {
-        if (autoMace.getValue() && MaceUtil.isHoldingMace()) {
-            return mc.player.fallDistance > 1.5f || MaceUtil.willLandSoon();
-        }
         return true;
     }
 
@@ -292,46 +356,10 @@ public class AttackAura extends Module {
         return -1;
     }
 
-    private int findEmptyHotbarSlot() {
-        for (int i = 0; i < 9; i++) {
-            if (mc.player.getInventory().getStack(i).isEmpty()) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private void restoreSlot() {
         if (prevSlot != -1) {
             mc.player.getInventory().selectedSlot = prevSlot;
             prevSlot = -1;
-        }
-    }
-
-    private void rotateToTarget() {
-        if (target == null) return;
-
-        Vec3d eye = mc.player.getEyePos();
-        Vec3d targetPos = target.getPos().add(0, target.getHeight() * 0.5, 0);
-
-        double dx = targetPos.x - eye.x;
-        double dy = targetPos.y - eye.y;
-        double dz = targetPos.z - eye.z;
-
-        double distanceXZ = Math.sqrt(dx * dx + dz * dz);
-        float targetYaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90F;
-        float targetPitch = (float) -Math.toDegrees(Math.atan2(dy, distanceXZ));
-
-        String mode = rotationMode.getValue();
-        if (mode.equals("Instant")) {
-            mc.player.setYaw(targetYaw);
-            mc.player.setPitch(MathHelper.clamp(targetPitch, -90f, 90f));
-        } else if (mode.equals("Smooth")) {
-            float[] smoothed = AuraUtil.smoothRotate(mc.player.getYaw(), mc.player.getPitch(), targetYaw, targetPitch, 30f);
-            mc.player.setYaw(smoothed[0]);
-            mc.player.setPitch(MathHelper.clamp(smoothed[1], -90f, 90f));
-        } else if (mode.equals("Silent")) {
-            RotationComponent.update(new Rotation(targetYaw, MathHelper.clamp(targetPitch, -90f, 90f)), 45f, 45f, 30, 1);
         }
     }
 }

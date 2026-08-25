@@ -2,7 +2,6 @@ package zov.alphadlc.module.list.combat;
 
 import com.google.common.eventbus.Subscribe;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.entity.mob.AmbientEntity;
@@ -21,8 +20,9 @@ import net.minecraft.util.Hand;
 import net.minecraft.util.PlayerInput;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import zov.alphadlc.AlphaDLC;
 import zov.alphadlc.util.friend.FriendRepository;
-import zov.alphadlc.event.list.EventGameUpdate;
+import zov.alphadlc.event.EventGameUpdate;
 import zov.alphadlc.event.list.EventTick;
 import zov.alphadlc.event.list.MoveInputEvent;
 import zov.alphadlc.module.Module;
@@ -76,7 +76,6 @@ public class AttackAura extends Module {
     // === State ===
     private LivingEntity target;
     private long lastAttackTime = 0;
-    private int axeSlot = -1;
     private int prevSlot = -1;
     private boolean wasSprinting = false;
     private float lastYaw;
@@ -86,7 +85,6 @@ public class AttackAura extends Module {
     public void onEnable() {
         target = null;
         lastAttackTime = 0;
-        axeSlot = -1;
         prevSlot = -1;
         wasSprinting = false;
         lastYaw = 0;
@@ -110,13 +108,10 @@ public class AttackAura extends Module {
         boolean isClientLook = clientLook.getValue();
 
         if (mode.equals("Instant")) {
-            // Instant — мгновенная ротация через RotationComponent
             RotationComponent.update(targetRot, 360, 360, 360, 360, 0, 1, isClientLook);
         } else if (mode.equals("Smooth")) {
-            // Smooth — плавная ротация
             RotationComponent.update(targetRot, 45, 45, 45, 45, 0, 1, isClientLook);
         } else if (mode.equals("Silent")) {
-            // Silent — только серверная ротация (clientLook = false)
             RotationComponent.update(targetRot, 360, 360, 360, 360, 0, 1, false);
         }
 
@@ -129,7 +124,6 @@ public class AttackAura extends Module {
     public void onTick(EventTick event) {
         if (mc.player == null || mc.world == null) return;
 
-        // Ищем цель
         if (!isValidTarget(target)) {
             target = findTarget().orElse(null);
         }
@@ -139,7 +133,6 @@ public class AttackAura extends Module {
             return;
         }
 
-        // Проверяем, можем ли атаковать
         if (canAttack()) {
             performAttack();
         }
@@ -283,7 +276,6 @@ public class AttackAura extends Module {
     }
 
     private void doAttack() {
-        // Сброс спринта для критов
         if (onlyCrits.getValue() && !smartSprint.getValue() && mc.player.isSprinting()
             && !mc.player.isTouchingWater() && !mc.player.isInLava()) {
             mc.player.setSprinting(false);
@@ -292,19 +284,15 @@ public class AttackAura extends Module {
             wasSprinting = true;
         }
 
-        // Стоп движение на момент удара (как в KillAura)
         mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(
             new PlayerInput(false, false, false, false, false, false, false)));
 
-        // Атака
         mc.interactionManager.attackEntity(mc.player, target);
         mc.player.swingHand(Hand.MAIN_HAND);
         lastAttackTime = System.currentTimeMillis();
 
-        // Восстановление движения
         mc.getNetworkHandler().sendPacket(new PlayerInputC2SPacket(mc.player.input.playerInput));
 
-        // Восстановление спринта
         if (wasSprinting && smartSprint.getValue()) {
             mc.player.setSprinting(true);
             mc.player.networkHandler.sendPacket(
@@ -316,26 +304,21 @@ public class AttackAura extends Module {
     private boolean canAttack() {
         if (target == null || mc.player == null) return false;
 
-        // Проверка APS
         long delayMs = (long) (1000.0 / aps.getValue());
         if (System.currentTimeMillis() - lastAttackTime < delayMs) return false;
 
-        // Проверка кулдауна атаки (как в KillAura)
         if (!AlphaDLC.getInstance().getIdealHitUtils().cooldownIsReached(false)) return false;
 
-        // Проверка дистанции
         if (mc.player.getEyePos().distanceTo(target.getPos().add(0, target.getHeight() * 0.5, 0)) > attackRange.getValue()) {
             return false;
         }
 
-        // Проверка наведения (raycast) — КЛЮЧЕВОЕ!
         if (raycastCheck.getValue() && !hitThroughWalls.getValue()) {
             if (!RaytraceUtil.rayTrace(mc.player.getRotationVector(), attackRange.getValue(), target.getBoundingBox())) {
                 return false;
             }
         }
 
-        // Проверка критов
         if (onlyCrits.getValue() && !AuraUtil.isCritPossible()) {
             return false;
         }
