@@ -21,6 +21,8 @@ import zov.alphadlc.module.ModuleInformation;
 import zov.alphadlc.util.rotation.Rotation;
 import zov.alphadlc.util.rotation.RotationComponent;
 
+import java.util.function.Predicate;
+
 @ModuleInformation(
         moduleName = "Apple Farm",
         moduleDesc = "Стационарная автоматическая ферма дуба для яблок",
@@ -38,16 +40,12 @@ public class AppleFarm extends Module {
 
     private State state = State.WAITING;
 
-    /** Блок земли, на который игрок навёлся при включении. */
     private BlockPos groundPos;
-
-    /** Блок, где должен находиться саженец. */
     private BlockPos saplingPos;
 
     private int previousSlot = -1;
     private int targetSlot = -1;
 
-    private boolean attacking;
     private int growTicks;
     private int emptyTicks;
 
@@ -56,11 +54,13 @@ public class AppleFarm extends Module {
         super.onEnable();
 
         state = State.WAITING;
+
         groundPos = null;
         saplingPos = null;
+
         previousSlot = -1;
         targetSlot = -1;
-        attacking = false;
+
         growTicks = 0;
         emptyTicks = 0;
 
@@ -75,37 +75,22 @@ public class AppleFarm extends Module {
         }
 
         BlockPos hitPos = hit.getBlockPos();
-        BlockState state = mc.world.getBlockState(hitPos);
+        BlockState hitState = mc.world.getBlockState(hitPos);
 
-        if (!isPlantableGround(state)) {
-            disableWithMessage("Нужно навестись на землю/дёрн.");
+        if (!isPlantableGround(hitState)) {
+            disableWithMessage("Нужно навестись на землю или дёрн.");
             return;
         }
 
         groundPos = hitPos.toImmutable();
         saplingPos = groundPos.up();
 
-        this.state = StateFor(saplingPos);
-    }
-
-    private State StateFor(BlockPos pos) {
-        Block block = mc.world.getBlockState(pos).getBlock();
-
-        if (block == Blocks.OAK_SAPLING) {
-            return State.GROWING;
-        }
-        if (isOakLeaves(block)) {
-            return State.BREAKING_LEAVES;
-        }
-        if (block == Blocks.OAK_LOG) {
-            return State.BREAKING_LOG;
-        }
-        return State.PLANTING;
+        state = getStateForBlock(saplingPos);
     }
 
     @Override
     public void onDisable() {
-        releaseKeys();
+        releaseAttack();
 
         if (previousSlot != -1 && mc.player != null) {
             mc.player.getInventory().selectedSlot = previousSlot;
@@ -114,8 +99,10 @@ public class AppleFarm extends Module {
 
         previousSlot = -1;
         targetSlot = -1;
+
         groundPos = null;
         saplingPos = null;
+
         state = State.WAITING;
 
         try {
@@ -127,49 +114,87 @@ public class AppleFarm extends Module {
     }
 
     @Subscribe
-    private void onUpdate(EventPlayerUpdate ignored) {
-        if (mc.player == null || mc.world == null || groundPos == null || saplingPos == null) {
+    private void onUpdate(EventPlayerUpdate event) {
+        if (mc.player == null || mc.world == null) {
             return;
         }
 
-        // Ферма стационарная: модуль сам не нажимает клавиши движения.
-        // Baritone pathfinding здесь намеренно не запускается.
+        if (groundPos == null || saplingPos == null) {
+            return;
+        }
 
         switch (state) {
+
             case WAITING -> {
-                state = StateFor(saplingPos);
+                state = getStateForBlock(saplingPos);
             }
 
-            case PLANTING -> plantSapling();
+            case PLANTING -> {
+                plantSapling();
+            }
 
-            case GROWING -> growTree();
+            case GROWING -> {
+                growTree();
+            }
 
-            case BREAKING_LEAVES -> breakLeaves();
+            case BREAKING_LEAVES -> {
+                breakLeaves();
+            }
 
-            case BREAKING_LOG -> breakLogs();
+            case BREAKING_LOG -> {
+                breakLogs();
+            }
         }
     }
 
+    /*
+     * Определяем состояние фермы по блоку над землёй.
+     */
+    private State getStateForBlock(BlockPos pos) {
+        Block block = mc.world.getBlockState(pos).getBlock();
+
+        if (block == Blocks.OAK_SAPLING) {
+            return State.GROWING;
+        }
+
+        if (block == Blocks.OAK_LEAVES) {
+            return State.BREAKING_LEAVES;
+        }
+
+        if (block == Blocks.OAK_LOG) {
+            return State.BREAKING_LOG;
+        }
+
+        return State.PLANTING;
+    }
+
+    /*
+     * Сажаем дубовый саженец.
+     */
     private void plantSapling() {
         releaseAttack();
 
-        int slot = findHotbarSlot(stack -> stack.isOf(Items.OAK_SAPLING));
+        if (!isPlantableGround(mc.world.getBlockState(groundPos))) {
+            disableWithMessage("Земля под фермой больше не подходит.");
+            return;
+        }
+
+        if (!mc.world.getBlockState(saplingPos).isAir()) {
+            state = getStateForBlock(saplingPos);
+            return;
+        }
+
+        int slot = findHotbarSlot(stack ->
+                stack.isOf(Items.OAK_SAPLING)
+        );
+
         if (slot == -1) {
             disableWithMessage("В хотбаре нет дубового саженца.");
             return;
         }
 
-        if (!isPlantableGround(mc.world.getBlockState(groundPos))) {
-            disableWithMessage("Под саженцем больше нет подходящей земли.");
-            return;
-        }
+        forceSelectSlot(slot);
 
-        if (!mc.world.getBlockState(saplingPos).isAir()) {
-            state = StateFor(saplingPos);
-            return;
-        }
-
-        selectSlot(slot);
         aimAtBlock(groundPos);
 
         BlockHitResult hit = new BlockHitResult(
@@ -179,13 +204,21 @@ public class AppleFarm extends Module {
                 false
         );
 
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+        mc.interactionManager.interactBlock(
+                mc.player,
+                Hand.MAIN_HAND,
+                hit
+        );
+
         mc.player.swingHand(Hand.MAIN_HAND);
 
         state = State.GROWING;
         growTicks = 0;
     }
 
+    /*
+     * Выращиваем дерево костной мукой.
+     */
     private void growTree() {
         releaseAttack();
 
@@ -197,7 +230,7 @@ public class AppleFarm extends Module {
             return;
         }
 
-        if (isOakLeaves(block)) {
+        if (block == Blocks.OAK_LEAVES) {
             state = State.BREAKING_LEAVES;
             return;
         }
@@ -207,20 +240,19 @@ public class AppleFarm extends Module {
             return;
         }
 
-        int boneMealSlot = findHotbarSlot(stack -> stack.isOf(Items.BONE_MEAL));
+        int boneMealSlot = findHotbarSlot(stack ->
+                stack.isOf(Items.BONE_MEAL)
+        );
+
         if (boneMealSlot == -1) {
             disableWithMessage("В хотбаре нет костной муки.");
             return;
         }
 
-        selectSlot(boneMealSlot);
+        forceSelectSlot(boneMealSlot);
+
         aimAtBlock(saplingPos);
 
-        /*
-         * Сбрасываем клиентский cooldown и используем костную муку
-         * каждый тик. Сервер всё равно принимает/отклоняет действие
-         * согласно своим правилам и cooldown.
-         */
         mc.itemUseCooldown = 0;
 
         BlockHitResult hit = new BlockHitResult(
@@ -230,75 +262,120 @@ public class AppleFarm extends Module {
                 false
         );
 
-        mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, hit);
+        mc.interactionManager.interactBlock(
+                mc.player,
+                Hand.MAIN_HAND,
+                hit
+        );
+
         mc.player.swingHand(Hand.MAIN_HAND);
 
         growTicks++;
 
-        // Если сервер не даёт вырастить дерево, не зацикливаемся бесконечно.
         if (growTicks > 20 * 30) {
             disableWithMessage("Дерево не выросло за 30 секунд.");
         }
     }
 
+    /*
+     * Ломаем листья.
+     *
+     * ВАЖНО:
+     * Здесь ищется ТОЛЬКО HoeItem.
+     */
     private void breakLeaves() {
-        BlockPos leaf = findNearestBlock(Blocks.OAK_LEAVES, 8);
+
+        BlockPos leaf = findNearestBlock(
+                Blocks.OAK_LEAVES,
+                8
+        );
 
         if (leaf == null) {
+
             emptyTicks++;
-            if (emptyTicks >= 2) {
-                state = State.BREAKING_LOG;
-                emptyTicks = 0;
-            }
+
             releaseAttack();
+
+            if (emptyTicks >= 2) {
+                emptyTicks = 0;
+                state = State.BREAKING_LOG;
+            }
+
             return;
         }
 
         emptyTicks = 0;
 
-        int hoeSlot = findHotbarSlot(stack -> stack.getItem() instanceof HoeItem);
+        int hoeSlot = findHotbarSlot(stack ->
+                stack.getItem() instanceof HoeItem
+        );
+
         if (hoeSlot == -1) {
-            disableWithMessage("В хотбаре нет мотыги.");
+            disableWithMessage("В хотбаре нет мотыги для листвы.");
             return;
         }
 
-        selectSlot(hoeSlot);
+        /*
+         * ПРИНУДИТЕЛЬНО выбираем мотыгу.
+         */
+        forceSelectSlot(hoeSlot);
+
         aimAtBlock(leaf);
 
         /*
-         * Не подбираем дроп и не ходим к нему.
-         * Держим обычную кнопку атаки — Minecraft сам ведёт
-         * прогресс разрушения блока.
+         * Держим атаку.
          */
         mc.options.attackKey.setPressed(true);
-        attacking = true;
     }
 
+    /*
+     * Ломаем брёвна.
+     *
+     * Здесь ищется ТОЛЬКО AxeItem.
+     */
     private void breakLogs() {
-        BlockPos log = findNearestBlock(Blocks.OAK_LOG, 8);
+
+        BlockPos log = findNearestBlock(
+                Blocks.OAK_LOG,
+                8
+        );
 
         if (log == null) {
+
             releaseAttack();
+
             state = State.PLANTING;
+
             growTicks = 0;
             emptyTicks = 0;
+
             return;
         }
 
-        int axeSlot = findHotbarSlot(stack -> stack.getItem() instanceof AxeItem);
+        int axeSlot = findHotbarSlot(stack ->
+                stack.getItem() instanceof AxeItem
+        );
+
         if (axeSlot == -1) {
             disableWithMessage("В хотбаре нет топора.");
             return;
         }
 
-        selectSlot(axeSlot);
+        /*
+         * ПРИНУДИТЕЛЬНО выбираем топор.
+         */
+        forceSelectSlot(axeSlot);
+
         aimAtBlock(log);
 
         mc.options.attackKey.setPressed(true);
-        attacking = true;
     }
 
+    /*
+     * Находим ближайший нужный блок.
+     */
     private BlockPos findNearestBlock(Block wanted, int range) {
+
         BlockPos best = null;
         double bestDistance = Double.MAX_VALUE;
 
@@ -307,9 +384,16 @@ public class AppleFarm extends Module {
         int baseZ = saplingPos.getZ();
 
         for (int x = -range; x <= range; x++) {
+
             for (int y = -2; y <= 8; y++) {
+
                 for (int z = -range; z <= range; z++) {
-                    BlockPos pos = new BlockPos(baseX + x, baseY + y, baseZ + z);
+
+                    BlockPos pos = new BlockPos(
+                            baseX + x,
+                            baseY + y,
+                            baseZ + z
+                    );
 
                     if (mc.world.getBlockState(pos).getBlock() != wanted) {
                         continue;
@@ -332,7 +416,11 @@ public class AppleFarm extends Module {
         return best;
     }
 
+    /*
+     * Поворачиваем голову на блок.
+     */
     private void aimAtBlock(BlockPos pos) {
+
         Vec3d target = Vec3d.ofCenter(pos);
         Vec3d eye = mc.player.getEyePos();
 
@@ -340,17 +428,24 @@ public class AppleFarm extends Module {
         double dy = target.y - eye.y;
         double dz = target.z - eye.z;
 
-        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        double horizontal = Math.sqrt(
+                dx * dx + dz * dz
+        );
 
-        float yaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
-        float pitch = (float) Math.toDegrees(Math.atan2(-dy, horizontal));
+        float yaw = (float) Math.toDegrees(
+                Math.atan2(-dx, dz)
+        );
 
-        pitch = MathHelper.clamp(pitch, -90.0F, 90.0F);
+        float pitch = (float) Math.toDegrees(
+                Math.atan2(-dy, horizontal)
+        );
 
-        /*
-         * Очень высокая скорость: голова фактически переходит
-         * на следующий блок за один клиентский тик.
-         */
+        pitch = MathHelper.clamp(
+                pitch,
+                -90.0F,
+                90.0F
+        );
+
         RotationComponent.update(
                 new Rotation(yaw, pitch),
                 360.0F,
@@ -363,35 +458,64 @@ public class AppleFarm extends Module {
         );
     }
 
-    private void selectSlot(int slot) {
-        if (slot < 0 || slot > 8 || mc.player == null) {
+    /*
+     * Жёсткое переключение слота.
+     *
+     * Именно это отличается от предыдущей версии:
+     * мы НЕ доверяем targetSlot и всегда синхронизируем
+     * выбранный предмет с сервером.
+     */
+    private void forceSelectSlot(int slot) {
+
+        if (mc.player == null) {
             return;
         }
 
-        if (targetSlot == slot) {
+        if (slot < 0 || slot > 8) {
             return;
         }
 
         if (previousSlot == -1) {
-            previousSlot = mc.player.getInventory().selectedSlot;
+            previousSlot =
+                    mc.player.getInventory().selectedSlot;
         }
 
         mc.player.getInventory().selectedSlot = slot;
+
         mc.interactionManager.syncSelectedSlot();
+
         targetSlot = slot;
     }
 
-    private int findHotbarSlot(java.util.function.Predicate<ItemStack> predicate) {
+    /*
+     * Ищем предмет только в хотбаре.
+     */
+    private int findHotbarSlot(
+            Predicate<ItemStack> predicate
+    ) {
+
         for (int i = 0; i < 9; i++) {
-            ItemStack stack = mc.player.getInventory().getStack(i);
-            if (!stack.isEmpty() && predicate.test(stack)) {
+
+            ItemStack stack =
+                    mc.player.getInventory().getStack(i);
+
+            if (stack.isEmpty()) {
+                continue;
+            }
+
+            if (predicate.test(stack)) {
                 return i;
             }
         }
+
         return -1;
     }
 
+    /*
+     * Подходит ли блок для посадки дуба.
+     */
     private boolean isPlantableGround(BlockState state) {
+
         Block block = state.getBlock();
 
         return block == Blocks.DIRT
@@ -400,18 +524,21 @@ public class AppleFarm extends Module {
                 || block == Blocks.ROOTED_DIRT;
     }
 
-    private boolean isOakLeaves(Block block) {
-        return block == Blocks.OAK_LEAVES;
-    }
-
+    /*
+     * Останавливаем атаку.
+     */
     private void releaseAttack() {
+
         if (mc.options != null) {
             mc.options.attackKey.setPressed(false);
         }
-        attacking = false;
     }
 
+    /*
+     * Останавливаем все кнопки.
+     */
     private void releaseKeys() {
+
         releaseAttack();
 
         if (mc.options != null) {
@@ -419,13 +546,21 @@ public class AppleFarm extends Module {
         }
     }
 
+    /*
+     * Выключение модуля с сообщением.
+     */
     private void disableWithMessage(String message) {
+
         if (mc.player != null) {
+
             mc.player.sendMessage(
-                    net.minecraft.text.Text.literal("§c[Apple Farm] §f" + message),
+                    net.minecraft.text.Text.literal(
+                            "§c[Apple Farm] §f" + message
+                    ),
                     false
             );
         }
+
         setEnabled(false);
     }
 }
