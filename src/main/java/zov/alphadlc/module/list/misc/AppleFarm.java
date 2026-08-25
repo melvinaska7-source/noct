@@ -85,7 +85,7 @@ public class AppleFarm extends Module {
         groundPos = hitPos.toImmutable();
         saplingPos = groundPos.up();
 
-        state = StateFor(saplingPos);
+        this.state = StateFor(saplingPos);
     }
 
     private State StateFor(BlockPos pos) {
