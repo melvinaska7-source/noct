@@ -21,8 +21,6 @@ import zov.alphadlc.module.ModuleInformation;
 import zov.alphadlc.util.rotation.Rotation;
 import zov.alphadlc.util.rotation.RotationComponent;
 
-import java.util.function.Predicate;
-
 @ModuleInformation(
         moduleName = "Apple Farm",
         moduleDesc = "Стационарная автоматическая ферма дуба для яблок",
@@ -40,12 +38,19 @@ public class AppleFarm extends Module {
 
     private State state = State.WAITING;
 
+    /** Блок земли, на который игрок навёлся при включении. */
     private BlockPos groundPos;
+
+    /** Блок, где находится саженец. */
     private BlockPos saplingPos;
 
+    /** Предыдущий слот игрока. */
     private int previousSlot = -1;
+
+    /** Последний выбранный слот. */
     private int targetSlot = -1;
 
+    private boolean attacking;
     private int growTicks;
     private int emptyTicks;
 
@@ -54,13 +59,13 @@ public class AppleFarm extends Module {
         super.onEnable();
 
         state = State.WAITING;
-
         groundPos = null;
         saplingPos = null;
 
         previousSlot = -1;
         targetSlot = -1;
 
+        attacking = false;
         growTicks = 0;
         emptyTicks = 0;
 
@@ -75,22 +80,40 @@ public class AppleFarm extends Module {
         }
 
         BlockPos hitPos = hit.getBlockPos();
-        BlockState hitState = mc.world.getBlockState(hitPos);
+        BlockState blockState = mc.world.getBlockState(hitPos);
 
-        if (!isPlantableGround(hitState)) {
-            disableWithMessage("Нужно навестись на землю или дёрн.");
+        if (!isPlantableGround(blockState)) {
+            disableWithMessage("Нужно навестись на землю/дёрн.");
             return;
         }
 
         groundPos = hitPos.toImmutable();
         saplingPos = groundPos.up();
 
-        state = getStateForBlock(saplingPos);
+        this.state = getStateFor(saplingPos);
+    }
+
+    private State getStateFor(BlockPos pos) {
+        Block block = mc.world.getBlockState(pos).getBlock();
+
+        if (block == Blocks.OAK_SAPLING) {
+            return State.GROWING;
+        }
+
+        if (block == Blocks.OAK_LEAVES) {
+            return State.BREAKING_LEAVES;
+        }
+
+        if (block == Blocks.OAK_LOG) {
+            return State.BREAKING_LOG;
+        }
+
+        return State.PLANTING;
     }
 
     @Override
     public void onDisable() {
-        releaseAttack();
+        releaseKeys();
 
         if (previousSlot != -1 && mc.player != null) {
             mc.player.getInventory().selectedSlot = previousSlot;
@@ -114,19 +137,18 @@ public class AppleFarm extends Module {
     }
 
     @Subscribe
-    private void onUpdate(EventPlayerUpdate event) {
-        if (mc.player == null || mc.world == null) {
-            return;
-        }
-
-        if (groundPos == null || saplingPos == null) {
+    private void onUpdate(EventPlayerUpdate ignored) {
+        if (mc.player == null
+                || mc.world == null
+                || groundPos == null
+                || saplingPos == null) {
             return;
         }
 
         switch (state) {
 
             case WAITING -> {
-                state = getStateForBlock(saplingPos);
+                state = getStateFor(saplingPos);
             }
 
             case PLANTING -> {
@@ -147,53 +169,32 @@ public class AppleFarm extends Module {
         }
     }
 
-    /*
-     * Определяем состояние фермы по блоку над землёй.
-     */
-    private State getStateForBlock(BlockPos pos) {
-        Block block = mc.world.getBlockState(pos).getBlock();
-
-        if (block == Blocks.OAK_SAPLING) {
-            return State.GROWING;
-        }
-
-        if (block == Blocks.OAK_LEAVES) {
-            return State.BREAKING_LEAVES;
-        }
-
-        if (block == Blocks.OAK_LOG) {
-            return State.BREAKING_LOG;
-        }
-
-        return State.PLANTING;
-    }
-
-    /*
-     * Сажаем дубовый саженец.
+    /**
+     * Сажает дубовый саженец.
      */
     private void plantSapling() {
         releaseAttack();
 
-        if (!isPlantableGround(mc.world.getBlockState(groundPos))) {
-            disableWithMessage("Земля под фермой больше не подходит.");
-            return;
-        }
-
-        if (!mc.world.getBlockState(saplingPos).isAir()) {
-            state = getStateForBlock(saplingPos);
-            return;
-        }
-
-        int slot = findHotbarSlot(stack ->
-                stack.isOf(Items.OAK_SAPLING)
+        int saplingSlot = findHotbarSlot(
+                stack -> stack.isOf(Items.OAK_SAPLING)
         );
 
-        if (slot == -1) {
+        if (saplingSlot == -1) {
             disableWithMessage("В хотбаре нет дубового саженца.");
             return;
         }
 
-        forceSelectSlot(slot);
+        if (!isPlantableGround(mc.world.getBlockState(groundPos))) {
+            disableWithMessage("Под саженцем больше нет подходящей земли.");
+            return;
+        }
+
+        if (!mc.world.getBlockState(saplingPos).isAir()) {
+            state = getStateFor(saplingPos);
+            return;
+        }
+
+        selectSlot(saplingSlot);
 
         aimAtBlock(groundPos);
 
@@ -216,8 +217,8 @@ public class AppleFarm extends Module {
         growTicks = 0;
     }
 
-    /*
-     * Выращиваем дерево костной мукой.
+    /**
+     * Выращивает дерево костной мукой.
      */
     private void growTree() {
         releaseAttack();
@@ -232,6 +233,7 @@ public class AppleFarm extends Module {
 
         if (block == Blocks.OAK_LEAVES) {
             state = State.BREAKING_LEAVES;
+            emptyTicks = 0;
             return;
         }
 
@@ -240,8 +242,8 @@ public class AppleFarm extends Module {
             return;
         }
 
-        int boneMealSlot = findHotbarSlot(stack ->
-                stack.isOf(Items.BONE_MEAL)
+        int boneMealSlot = findHotbarSlot(
+                stack -> stack.isOf(Items.BONE_MEAL)
         );
 
         if (boneMealSlot == -1) {
@@ -249,7 +251,7 @@ public class AppleFarm extends Module {
             return;
         }
 
-        forceSelectSlot(boneMealSlot);
+        selectSlot(boneMealSlot);
 
         aimAtBlock(saplingPos);
 
@@ -277,11 +279,10 @@ public class AppleFarm extends Module {
         }
     }
 
-    /*
-     * Ломаем листья.
+    /**
+     * Ломает всю найденную листву.
      *
-     * ВАЖНО:
-     * Здесь ищется ТОЛЬКО HoeItem.
+     * Для листвы всегда выбирается МОТЫГА.
      */
     private void breakLeaves() {
 
@@ -290,8 +291,11 @@ public class AppleFarm extends Module {
                 8
         );
 
+        /*
+         * Если поблизости больше нет листвы,
+         * только тогда переходим к брёвнам.
+         */
         if (leaf == null) {
-
             emptyTicks++;
 
             releaseAttack();
@@ -306,12 +310,12 @@ public class AppleFarm extends Module {
 
         emptyTicks = 0;
 
-        int hoeSlot = findHotbarSlot(stack ->
-                stack.getItem() instanceof HoeItem
+        int hoeSlot = findHotbarSlot(
+                stack -> stack.getItem() instanceof HoeItem
         );
 
         if (hoeSlot == -1) {
-            disableWithMessage("В хотбаре нет мотыги для листвы.");
+            disableWithMessage("В хотбаре нет мотыги.");
             return;
         }
 
@@ -322,16 +326,14 @@ public class AppleFarm extends Module {
 
         aimAtBlock(leaf);
 
-        /*
-         * Держим атаку.
-         */
         mc.options.attackKey.setPressed(true);
+        attacking = true;
     }
 
-    /*
-     * Ломаем брёвна.
+    /**
+     * Ломает брёвна.
      *
-     * Здесь ищется ТОЛЬКО AxeItem.
+     * Для брёвен всегда выбирается ТОПОР.
      */
     private void breakLogs() {
 
@@ -340,8 +342,11 @@ public class AppleFarm extends Module {
                 8
         );
 
+        /*
+         * Если брёвен больше нет —
+         * начинаем новый цикл.
+         */
         if (log == null) {
-
             releaseAttack();
 
             state = State.PLANTING;
@@ -352,8 +357,8 @@ public class AppleFarm extends Module {
             return;
         }
 
-        int axeSlot = findHotbarSlot(stack ->
-                stack.getItem() instanceof AxeItem
+        int axeSlot = findHotbarSlot(
+                stack -> stack.getItem() instanceof AxeItem
         );
 
         if (axeSlot == -1) {
@@ -369,12 +374,74 @@ public class AppleFarm extends Module {
         aimAtBlock(log);
 
         mc.options.attackKey.setPressed(true);
+        attacking = true;
     }
 
-    /*
-     * Находим ближайший нужный блок.
+    /**
+     * Принудительная смена хотбарного слота.
+     *
+     * Используется отдельно от обычного selectSlot(),
+     * чтобы инструмент гарантированно менялся между
+     * мотыгой и топором.
      */
-    private BlockPos findNearestBlock(Block wanted, int range) {
+    private void forceSelectSlot(int slot) {
+
+        if (mc.player == null) {
+            return;
+        }
+
+        if (slot < 0 || slot > 8) {
+            return;
+        }
+
+        if (previousSlot == -1) {
+            previousSlot = mc.player.getInventory().selectedSlot;
+        }
+
+        if (mc.player.getInventory().selectedSlot != slot) {
+
+            mc.player.getInventory().selectedSlot = slot;
+
+            mc.interactionManager.syncSelectedSlot();
+        }
+
+        targetSlot = slot;
+    }
+
+    /**
+     * Обычная смена слота.
+     */
+    private void selectSlot(int slot) {
+
+        if (mc.player == null) {
+            return;
+        }
+
+        if (slot < 0 || slot > 8) {
+            return;
+        }
+
+        if (previousSlot == -1) {
+            previousSlot = mc.player.getInventory().selectedSlot;
+        }
+
+        if (mc.player.getInventory().selectedSlot != slot) {
+
+            mc.player.getInventory().selectedSlot = slot;
+
+            mc.interactionManager.syncSelectedSlot();
+        }
+
+        targetSlot = slot;
+    }
+
+    /**
+     * Ищет ближайший нужный блок.
+     */
+    private BlockPos findNearestBlock(
+            Block wanted,
+            int range
+    ) {
 
         BlockPos best = null;
         double bestDistance = Double.MAX_VALUE;
@@ -399,11 +466,12 @@ public class AppleFarm extends Module {
                         continue;
                     }
 
-                    double distance = mc.player.squaredDistanceTo(
-                            pos.getX() + 0.5,
-                            pos.getY() + 0.5,
-                            pos.getZ() + 0.5
-                    );
+                    double distance =
+                            mc.player.squaredDistanceTo(
+                                    pos.getX() + 0.5,
+                                    pos.getY() + 0.5,
+                                    pos.getZ() + 0.5
+                            );
 
                     if (distance < bestDistance) {
                         bestDistance = distance;
@@ -416,8 +484,8 @@ public class AppleFarm extends Module {
         return best;
     }
 
-    /*
-     * Поворачиваем голову на блок.
+    /**
+     * Поворачивает голову к блоку.
      */
     private void aimAtBlock(BlockPos pos) {
 
@@ -428,17 +496,18 @@ public class AppleFarm extends Module {
         double dy = target.y - eye.y;
         double dz = target.z - eye.z;
 
-        double horizontal = Math.sqrt(
-                dx * dx + dz * dz
-        );
+        double horizontal =
+                Math.sqrt(dx * dx + dz * dz);
 
-        float yaw = (float) Math.toDegrees(
-                Math.atan2(-dx, dz)
-        );
+        float yaw =
+                (float) Math.toDegrees(
+                        Math.atan2(-dx, dz)
+                );
 
-        float pitch = (float) Math.toDegrees(
-                Math.atan2(-dy, horizontal)
-        );
+        float pitch =
+                (float) Math.toDegrees(
+                        Math.atan2(-dy, horizontal)
+                );
 
         pitch = MathHelper.clamp(
                 pitch,
@@ -458,40 +527,11 @@ public class AppleFarm extends Module {
         );
     }
 
-    /*
-     * Жёсткое переключение слота.
-     *
-     * Именно это отличается от предыдущей версии:
-     * мы НЕ доверяем targetSlot и всегда синхронизируем
-     * выбранный предмет с сервером.
-     */
-    private void forceSelectSlot(int slot) {
-
-        if (mc.player == null) {
-            return;
-        }
-
-        if (slot < 0 || slot > 8) {
-            return;
-        }
-
-        if (previousSlot == -1) {
-            previousSlot =
-                    mc.player.getInventory().selectedSlot;
-        }
-
-        mc.player.getInventory().selectedSlot = slot;
-
-        mc.interactionManager.syncSelectedSlot();
-
-        targetSlot = slot;
-    }
-
-    /*
-     * Ищем предмет только в хотбаре.
+    /**
+     * Ищет предмет в хотбаре.
      */
     private int findHotbarSlot(
-            Predicate<ItemStack> predicate
+            java.util.function.Predicate<ItemStack> predicate
     ) {
 
         for (int i = 0; i < 9; i++) {
@@ -499,11 +539,9 @@ public class AppleFarm extends Module {
             ItemStack stack =
                     mc.player.getInventory().getStack(i);
 
-            if (stack.isEmpty()) {
-                continue;
-            }
+            if (!stack.isEmpty()
+                    && predicate.test(stack)) {
 
-            if (predicate.test(stack)) {
                 return i;
             }
         }
@@ -511,8 +549,8 @@ public class AppleFarm extends Module {
         return -1;
     }
 
-    /*
-     * Подходит ли блок для посадки дуба.
+    /**
+     * Проверяет, подходит ли блок для посадки дуба.
      */
     private boolean isPlantableGround(BlockState state) {
 
@@ -524,18 +562,20 @@ public class AppleFarm extends Module {
                 || block == Blocks.ROOTED_DIRT;
     }
 
-    /*
-     * Останавливаем атаку.
+    /**
+     * Отпускает кнопку атаки.
      */
     private void releaseAttack() {
 
         if (mc.options != null) {
             mc.options.attackKey.setPressed(false);
         }
+
+        attacking = false;
     }
 
-    /*
-     * Останавливаем все кнопки.
+    /**
+     * Отпускает все удерживаемые клавиши.
      */
     private void releaseKeys() {
 
@@ -546,8 +586,8 @@ public class AppleFarm extends Module {
         }
     }
 
-    /*
-     * Выключение модуля с сообщением.
+    /**
+     * Отключает модуль с сообщением.
      */
     private void disableWithMessage(String message) {
 
