@@ -32,34 +32,61 @@ import java.util.stream.Collectors;
 
 @Getter
 public class ModuleStorage implements IMinecraft {
+
     private final List<Module> modules = new ArrayList<>();
 
     public void injectRegisterModules() {
         modules.addAll(List.of(
-                new FullBright(), new ClickGui(), new Sprint(),
-                new TriggerBot(),
-                new NoRender(), new KillAura(),
-                new NameTags(), new TargetESP(), new NoPush(), new SoulESP(),
-                new NoJumpDelay(), new TeleportBack(), new ElytraHelper(),
-                new AutoTotem(), new ClickPearl(), new UseTracker(), new CrystalAura(),
-                new ClientSounds(), new NoFriendDamage(), new ElytraBooster(),
-                new FreeCamera(), new SwingAnimations(), new Predictions(),
-                new DogFly(), new AutoTpaccept(), new RPSpoofer(), new FireFly(),
-                new AntiBot(), new AutoExplosion(), new DeathCoords(), new CrystalOptimizer(),
-                new GuiMove(), new Tracers(), new ElytraMotion(), new Velocity(), new ElytraFlight(),
-                new ViewModel(), new GlassHands(), new ItemReplacer(), new KillEffect(), new AutoArmor(), new Speed(),
-                new AutoTool(), new TapeMouse(), new Ambience(), new BlockOverlay(), new FreeLook(), new Chams(), new GlowEsp(),
-                new Trails(), new FastExp(), new NameProtect(), new CrystalSpammer(),
-                new AirStuck(), new AutoSwap(), new NoSlow(), new NoWeb(), new FakePlayer(), new Interface(), new AutoEat(),new AutoLeave(),
-                new Wings(), new ScoreboardHealth(), new AutoPotion(), new Cape(),
-                new AutoDuel(), new DragonFly(), new Strafe(),
-                new ChestStealer(), new SeeInvisible(), new ShulkerView(),
-                new ServerJoiner(), new UseIndicator(), new ServerHelper(),
-                new Particles(), new Arrows(), 
-                new TeleportExploit(), new AutoTrap(), new AppleFarm(),
-                new TargetPearl(), new LineGlyphs(), new HitIndicator(),
-                new GrimGlide(), new Timer(), new MaceTarget(), new NoEntityTrace(),
-                new LockSlot(), new ElytraTarget(), new HitBubbles()
+                new FullBright(),
+                new ClickGui(),
+                new Sprint(),
+
+                new NoRender(),
+                new NameProtect(),
+                new TargetESP(),
+                new ElytraHelper(),
+                new AutoTotem(),
+                new ClickPearl(),
+                new ClientSounds(),
+                new NoFriendDamage(),
+
+                new SwingAnimations(),
+                new Predictions(),
+                new AutoTpaccept(),
+                new FireFly(),
+                new CrystalOptimizer(),
+                new GuiMove(),
+                new ViewModel(),
+                new GlassHands(),
+                new ItemReplacer(),
+                new KillEffect(),
+
+                new AutoArmor(),
+                new AutoTool(),
+                new Ambience(),
+                new BlockOverlay(),
+                new FreeLook(),
+                new Trails(),
+                new FastExp(),
+                new AutoSwap(),
+                new AutoEat(),
+                new AutoLeave(),
+
+                new Wings(),
+                new AutoPotion(),
+                new Cape(),
+                new ShulkerView(),
+                new UseIndicator(),
+                new Particles(),
+                new Arrows(),
+                new LineGlyphs(),
+                new HitIndicator(),
+                new LockSlot(),
+                new HitBubbles(),
+
+                new AntiAFK(),
+                new ItemScroller(),
+                new Interface()
         ));
 
         AlphaDLC.getInstance().getEventBus().register(this);
@@ -87,15 +114,23 @@ public class ModuleStorage implements IMinecraft {
                 .collect(Collectors.toList());
     }
 
-    @Setter private float speedAcceleration;
-    @Setter private float randomness;
+    @Setter
+    private float speedAcceleration;
+
+    @Setter
+    private float randomness;
 
     @Subscribe
     private void onGameUpdate(EventGameUpdate e) {
         if (mc.player == null) return;
 
-        if (!SlownessManager.slowTasksIsEmpty()) SlownessManager.updateSlowTasks();
-        if (!SlownessManager.timeTasksIsEmpty()) SlownessManager.updateTimeTasks(false);
+        if (!SlownessManager.slowTasksIsEmpty()) {
+            SlownessManager.updateSlowTasks();
+        }
+
+        if (!SlownessManager.timeTasksIsEmpty()) {
+            SlownessManager.updateTimeTasks(false);
+        }
 
         var aura = get(KillAura.class);
 
@@ -118,9 +153,15 @@ public class ModuleStorage implements IMinecraft {
     private void onRender(EventHUD ignored) {
         for (var module : getModules()) {
             module.getAnimation().run(module.isEnabled());
+
             for (var setting : module.getSettings()) {
-                if (setting instanceof BooleanSetting b) b.getAnimation().run(b.getValue());
-                if (setting instanceof ThemeSetting t) t.getValue().animation.run(1);
+                if (setting instanceof BooleanSetting b) {
+                    b.getAnimation().run(b.getValue());
+                }
+
+                if (setting instanceof ThemeSetting t) {
+                    t.getValue().animation.run(1);
+                }
             }
         }
     }
@@ -128,13 +169,25 @@ public class ModuleStorage implements IMinecraft {
     @Subscribe
     private void onKey(EventKeyInput e) {
         if (e.getAction() == 0) return;
-        for (var module : getModules())
-            module.getSettings().stream().filter(setting -> setting instanceof BooleanSetting b && e.getKey() == b.getKey()).forEach(setting -> ((BooleanSetting) setting).toggle());
+
+        for (var module : getModules()) {
+            module.getSettings()
+                    .stream()
+                    .filter(setting ->
+                            setting instanceof BooleanSetting b &&
+                            e.getKey() == b.getKey()
+                    )
+                    .forEach(setting ->
+                            ((BooleanSetting) setting).toggle()
+                    );
+        }
     }
 
     @Subscribe
     private void onUpdate(EventTick ignored) {
-        if (!SlownessManager.timeTasksIsEmpty()) SlownessManager.updateTimeTasks(true);
+        if (!SlownessManager.timeTasksIsEmpty()) {
+            SlownessManager.updateTimeTasks(true);
+        }
 
         if (mc.player == null || true) return;
 
@@ -151,32 +204,54 @@ public class ModuleStorage implements IMinecraft {
     }
 
     private void updateBackwardsOther() {
-        if(mc.player.isGliding()){
+        if (mc.player.isGliding()) {
             speedAcceleration += 0.06f;
-
-        }
-        else{
+        } else {
             speedAcceleration += 0.006f;
-
         }
+
         get(KillAura.class).speedAcceleration = 0;
 
-        var angle = new Rotation(mc.gameRenderer.getCamera().getYaw(), mc.gameRenderer.getCamera().getPitch());
+        var angle = new Rotation(
+                mc.gameRenderer.getCamera().getYaw(),
+                mc.gameRenderer.getCamera().getPitch()
+        );
 
-        var deltaYaw = MathHelper.wrapDegrees(angle.getYaw() - mc.player.getYaw());
+        var deltaYaw = MathHelper.wrapDegrees(
+                angle.getYaw() - mc.player.getYaw()
+        );
+
         var deltaPitch = angle.getPitch() - mc.player.getPitch();
+
         if (mc.options.getPerspective() == Perspective.THIRD_PERSON_FRONT) {
-            deltaYaw = MathHelper.wrapDegrees((angle.getYaw() - 180) - mc.player.getYaw());
-            deltaPitch = MathHelper.wrapDegrees(-angle.getPitch() - mc.player.getPitch());
+            deltaYaw = MathHelper.wrapDegrees(
+                    (angle.getYaw() - 180) - mc.player.getYaw()
+            );
+
+            deltaPitch = MathHelper.wrapDegrees(
+                    -angle.getPitch() - mc.player.getPitch()
+            );
         }
 
         var smooth = Math.max(speedAcceleration, 0);
 
-        var newYaw = mc.player.getYaw() + deltaYaw * (Math.min(Math.max(smooth, 0), 1));
-        var newPitch = mc.player.getPitch() + deltaPitch * (Math.min(Math.max(smooth / 2, 0), 1));
+        var newYaw = mc.player.getYaw()
+                + deltaYaw * (Math.min(Math.max(smooth, 0), 1));
+
+        var newPitch = mc.player.getPitch()
+                + deltaPitch * (Math.min(Math.max(smooth / 2, 0), 1));
 
         var smoothRot = new Rotation(newYaw, newPitch);
 
-        RotationComponent.update(smoothRot, 360, 360, 360, 360, 0, 2, false);
+        RotationComponent.update(
+                smoothRot,
+                360,
+                360,
+                360,
+                360,
+                0,
+                2,
+                false
+        );
     }
 }

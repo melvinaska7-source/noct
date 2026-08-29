@@ -60,6 +60,7 @@ public class ModuleStorage implements IMinecraft {
                 new GlassHands(),
                 new ItemReplacer(),
                 new KillEffect(),
+                new FakePlayer(),
 
                 new AutoArmor(),
                 new AutoTool(),
