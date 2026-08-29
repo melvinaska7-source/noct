@@ -16,6 +16,7 @@ import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.hit.EntityHitResult;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -24,7 +25,6 @@ import zov.alphadlc.AlphaDLC;
 import zov.alphadlc.module.Module;
 import zov.alphadlc.module.ModuleCategory;
 import zov.alphadlc.module.ModuleInformation;
-import zov.alphadlc.module.list.combat.KillAura;
 import zov.alphadlc.module.settings.BooleanSetting;
 import zov.alphadlc.module.settings.ColorSetting;
 import zov.alphadlc.module.settings.ModeSetting;
@@ -86,7 +86,13 @@ public class TargetESP extends Module {
     private void onRenderWorldLast(MatrixStack matrices, Camera camera, float tickDelta) {
         if (!isEnabled()) return;
 
-        Entity target = AlphaDLC.getInstance().getModuleStorage().get(KillAura.class).getTarget();
+        Entity target = null;
+        if (mc.crosshairTarget instanceof EntityHitResult hit) {
+            Entity hitEntity = hit.getEntity();
+            if (hitEntity instanceof LivingEntity && hitEntity != mc.player && !hitEntity.isInvisible() && !(hitEntity instanceof ArmorStandEntity)) {
+                target = hitEntity;
+            }
+        }
 
         if (target != null && target != mc.player && !(target instanceof ArmorStandEntity)) {
             lastTarget = target;

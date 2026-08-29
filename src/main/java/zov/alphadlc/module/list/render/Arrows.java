@@ -70,7 +70,7 @@ public class Arrows extends Module {
         // Обход без stream-аллокаций.
         for (int i = 0; i < players.size(); i++) {
             AbstractClientPlayerEntity player = players.get(i);
-            if (player == mc.player || !player.isAlive() || player.isRemoved() || player.isSpectator()) continue;
+            if (player == mc.player || !player.isAlive() || player.isRemoved() || player.isSpectator() || player.isInvisible()) continue;
 
             int col = FriendRepository.isFriend(player.getNameForScoreboard())
                     ? 0xFF00FF00  // Зелёный цвет для друзей
